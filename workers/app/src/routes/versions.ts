@@ -8,7 +8,8 @@ import {
   createVersion,
   getVersion,
   versionDTO,
-  type VersionRow,
+  joinedVersionDTO,
+  type VersionWithCreator,
 } from "../services/versions";
 export const versionRoutes = new Hono<AppEnv>();
 versionRoutes.post("/v1/documents/:id/versions", async (c) => {
@@ -26,11 +27,11 @@ versionRoutes.post("/v1/documents/:id/versions", async (c) => {
 versionRoutes.get("/v1/documents/:id/versions", async (c) => {
   await requireDocument(c.env, c.get("actor"), c.req.param("id"), "viewer");
   const { results } = await c.env.DB.prepare(
-    "SELECT * FROM versions WHERE document_id=? ORDER BY number DESC",
+    "SELECT v.*,u.email AS creator_email,u.name AS creator_name,u.picture_url AS creator_picture_url FROM versions v LEFT JOIN users u ON u.id=v.created_by_user_id WHERE v.document_id=? ORDER BY v.number DESC",
   )
     .bind(c.req.param("id"))
-    .all<VersionRow>();
-  return c.json({ items: await Promise.all(results.map((v) => versionDTO(c.env, v))) });
+    .all<VersionWithCreator>();
+  return c.json({ items: results.map(joinedVersionDTO) });
 });
 versionRoutes.get("/v1/documents/:id/versions/:version_id", async (c) =>
   c.json(

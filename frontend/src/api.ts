@@ -36,7 +36,9 @@ export type ServerConfig = {
       | "realtime"
       | "document_kv"
       | "structured_mentions"
-      | "mcp",
+      | "mcp"
+      | "api_reference"
+      | "owner_managed_sharing",
       boolean
     >
   >;

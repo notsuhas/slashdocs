@@ -21,7 +21,7 @@ const app = {
   name: instance.appWorkerName,
   main: resolve(root, "workers/app/src/index.ts"),
   compatibility_flags: ["nodejs_compat"],
-  triggers: { crons: ["0 * * * *"] },
+  triggers: { crons: instance.cleanupCron ? ["0 * * * *"] : [] },
   routes: [{ pattern: new URL(instance.appOrigin).hostname, custom_domain: true }],
   assets: {
     directory: resolve(root, "workers/dist/app"),

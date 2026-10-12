@@ -19,7 +19,9 @@ Phase 1 is the publish/review foundation. Subsequent milestones retain the asses
 - Backend module implementations complete with real D1/R2 tests.
 - Local auth uses signed Google fixtures; live login awaits OAuth credentials.
 - Deployment tools provision resources by name and generate secrets/config only outside Git.
-- Integration verification and whole-branch review in progress.
+- Unmodified Go CLI create/pull/push verified against the local backend.
+- Browser verified actual text selection, anchored comment posting and resolution through the retained bridge.
+- Whole-branch review fixes in progress: query budgets, stable polling, canonical origins and remaining capability gates.
 
 ## Acceptance
 

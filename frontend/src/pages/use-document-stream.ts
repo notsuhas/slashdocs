@@ -100,6 +100,8 @@ export function useDocumentStream({
 }) {
   const q = useQueryClient();
   const realtime = useCapability("realtime");
+  const onRemoteDocumentChangeRef = useRef(onRemoteDocumentChange);
+  onRemoteDocumentChangeRef.current = onRemoteDocumentChange;
   const [session] = useState(() => crypto.randomUUID());
   const kvListeners = useRef(new Set<DocumentKVListener>());
   const [sessions, setSessions] = useState<ReadonlyMap<string, Viewer>>(new Map());
@@ -147,7 +149,7 @@ export function useDocumentStream({
         const latest = await api.getDocument(docId);
         if (stopped) return;
         if (latest.current_version_id && latest.current_version_id !== version)
-          onRemoteDocumentChange();
+          onRemoteDocumentChangeRef.current();
         q.setQueryData(queryKeys.document(docId), latest);
         void q.invalidateQueries({ queryKey: queryKeys.comments(docId) });
         void q.invalidateQueries({ queryKey: queryKeys.versions(docId) });
@@ -163,7 +165,7 @@ export function useDocumentStream({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [docId, version, realtime, q, onRemoteDocumentChange]);
+  }, [docId, version, realtime, q]);
 
   // Viewers whose tab closed without a goodbye drop out after the TTL.
   useEffect(() => {

@@ -211,26 +211,33 @@ export async function writeReaction(
       )
       .run();
 }
+interface ReactionRow {
+  comment_id: string;
+  emoji: string;
+  id: string;
+  email: string;
+  name: string;
+  picture_url: string;
+}
 export async function commentJSON(
   env: Env,
   actor: Actor,
   row: CommentRow,
   placementVersionId = row.created_on_version_id,
   html = "",
+  hydratedReactions?: ReactionRow[],
 ): Promise<Comment> {
-  const reactions = await env.DB.prepare(
-    "SELECT r.emoji,u.id,u.email,u.name,u.picture_url FROM comment_reactions r JOIN users u ON u.id=r.user_id WHERE r.comment_id=? ORDER BY r.emoji,u.id",
-  )
-    .bind(row.id)
-    .all<{
-      emoji: string;
-      id: string;
-      email: string;
-      name: string;
-      picture_url: string;
-    }>();
+  const reactions =
+    hydratedReactions ??
+    (
+      await env.DB.prepare(
+        "SELECT r.comment_id,r.emoji,u.id,u.email,u.name,u.picture_url FROM comment_reactions r JOIN users u ON u.id=r.user_id WHERE r.comment_id=? ORDER BY r.emoji,u.id",
+      )
+        .bind(row.id)
+        .all<ReactionRow>()
+    ).results;
   const groups = new Map<string, CommentReaction>();
-  for (const reaction of reactions.results) {
+  for (const reaction of reactions) {
     let group = groups.get(reaction.emoji);
     if (!group) {
       group = { emoji: reaction.emoji, count: 0, reacted: false, reactors: [] };
@@ -308,9 +315,27 @@ export async function listComments(
     if (!version) throw new ApiError(404, "not_found", "version not found in document");
     html = (await (await env.DOCUMENTS.get(version.object_key))?.text()) ?? "";
   }
+  const reactions = await env.DB.prepare(
+    "SELECT r.comment_id,r.emoji,u.id,u.email,u.name,u.picture_url FROM comment_reactions r JOIN users u ON u.id=r.user_id JOIN comments c ON c.id=r.comment_id WHERE c.document_id=? AND c.deleted_at IS NULL ORDER BY r.emoji,u.id",
+  )
+    .bind(docId)
+    .all<ReactionRow>();
+  const byComment = new Map<string, ReactionRow[]>();
+  for (const reaction of reactions.results) {
+    const group = byComment.get(reaction.comment_id) ?? [];
+    group.push(reaction);
+    byComment.set(reaction.comment_id, group);
+  }
   const outputs = await Promise.all(
     rows.results.map((row) =>
-      commentJSON(env, actor, row, versionId || row.created_on_version_id, html),
+      commentJSON(
+        env,
+        actor,
+        row,
+        versionId || row.created_on_version_id,
+        html,
+        byComment.get(row.id) ?? [],
+      ),
     ),
   );
   const roots = new Map<string, Comment>();

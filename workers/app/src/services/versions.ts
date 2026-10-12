@@ -16,6 +16,32 @@ export interface VersionRow {
   created_by_user_id: string;
   created_at: string;
 }
+export interface VersionWithCreator extends VersionRow {
+  creator_email: string | null;
+  creator_name: string | null;
+  creator_picture_url: string | null;
+}
+export function joinedVersionDTO(v: VersionWithCreator): Version {
+  return {
+    id: v.id,
+    document_id: v.document_id,
+    number: v.number,
+    sha256: v.sha256,
+    change_summary: v.change_summary,
+    created_at: v.created_at,
+    created_by: {
+      type: "user",
+      id: v.created_by_user_id,
+      ...(v.creator_email !== null
+        ? {
+            email: v.creator_email,
+            name: v.creator_name ?? "",
+            picture_url: v.creator_picture_url ?? "",
+          }
+        : {}),
+    },
+  };
+}
 export async function versionDTO(env: Env, v: VersionRow): Promise<Version> {
   const user = await env.DB.prepare(
     "SELECT id,email,name,picture_url FROM users WHERE id=?",

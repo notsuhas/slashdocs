@@ -41,10 +41,10 @@ export function renderWrapperHTML(
   appOrigin: string,
   print = false,
 ): string {
-  const source = userHTMLWithBridgePrelude(print ? printableHTML(html) : html);
+  const source = print ? printableHTML(html) : userHTMLWithBridgePrelude(html);
   const origin = JSON.stringify(appOrigin)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>slashdocs render</title><style>html,body{margin:0;height:100%;overflow:hidden}#slashdocs-doc{border:0;width:100%;height:100vh}</style><script>try{var u=new URL(location.href);if(u.searchParams.has("token")){u.searchParams.delete("token");history.replaceState(null,"",u.pathname+(u.search||"")+u.hash)}}catch(e){}</script></head><body><iframe id="slashdocs-doc" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" srcdoc="${attribute(source)}"></iframe><script>window.__SLASHDOCS_APP_ORIGIN__=${origin};${BRIDGE_JS}</script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>slashdocs render</title><style>html,body{margin:0;height:100%;overflow:hidden}#slashdocs-doc{border:0;width:100%;height:100vh}</style><script>try{var u=new URL(location.href);if(u.searchParams.has("token")){u.searchParams.delete("token");history.replaceState(null,"",u.pathname+(u.search||"")+u.hash)}}catch(e){}</script></head><body><iframe id="slashdocs-doc" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox${print ? " allow-modals" : ""}" srcdoc="${attribute(source)}"></iframe><script>window.__SLASHDOCS_APP_ORIGIN__=${origin};${print ? "" : BRIDGE_JS}</script></body></html>`;
 }

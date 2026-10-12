@@ -4,6 +4,11 @@ import { newId } from "../../../shared/ids";
 import { ApiError } from "../../../shared/errors";
 import { discardSource, storeSource } from "./content";
 import { requireDocument, viewerPredicate, type DocumentRow } from "./permissions";
+interface DocumentWithOwner extends DocumentRow {
+  owner_email: string | null;
+  owner_name: string | null;
+  owner_picture_url: string | null;
+}
 export async function documentDTO(env: Env, d: DocumentRow): Promise<Document> {
   const owner = await env.DB.prepare(
     "SELECT id,email,name,picture_url FROM users WHERE id=?",
@@ -84,11 +89,27 @@ export async function listDocuments(env: Env, actor: Actor, q: string) {
   const words = q.trim().split(/\s+/).filter(Boolean);
   const where = words.map(() => "instr(lower(d.title),lower(?))>0").join(" AND ");
   const { results } = await env.DB.prepare(
-    `SELECT d.* FROM documents d WHERE d.deleted_at IS NULL AND ${viewerPredicate} ${where ? "AND " + where : ""} ORDER BY d.updated_at DESC LIMIT 100`,
+    `SELECT d.*,u.email AS owner_email,u.name AS owner_name,u.picture_url AS owner_picture_url FROM documents d LEFT JOIN users u ON u.id=d.owner_user_id WHERE d.deleted_at IS NULL AND ${viewerPredicate} ${where ? "AND " + where : ""} ORDER BY d.updated_at DESC LIMIT 100`,
   )
     .bind(actor.principal.id, actor.principal.id, ...words)
-    .all<DocumentRow>();
-  return Promise.all(results.map((d) => documentDTO(env, d)));
+    .all<DocumentWithOwner>();
+  return results.map((d): Document => ({
+    id: d.id,
+    title: d.title,
+    owner: {
+      type: "user",
+      id: d.owner_user_id,
+      ...(d.owner_email !== null
+        ? {
+            email: d.owner_email,
+            name: d.owner_name ?? "",
+            picture_url: d.owner_picture_url ?? "",
+          }
+        : {}),
+    },
+    current_version_id: d.current_version_id ?? undefined,
+    updated_at: d.updated_at,
+  }));
 }
 export async function getDocument(env: Env, actor: Actor, id: string) {
   const { document } = await requireDocument(env, actor, id, "viewer");

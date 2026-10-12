@@ -31,6 +31,7 @@ export const instanceSchema = z.object({
     .regex(/^[a-z0-9-]+$/)
     .default("slashdocs-files"),
   databaseId: z.string().optional(),
+  cleanupCron: z.boolean().default(false),
   googleClientId: z.string().optional(),
   googleClientSecret: z.string().optional(),
   sessionSecret: z.string().optional(),
@@ -61,11 +62,15 @@ export async function loadInstance(
     app.hash ||
     render.hash ||
     app.username ||
-    render.username
+    render.username ||
+    app.password ||
+    render.password
   )
     throw new Error("Use two separate HTTPS hostnames without paths or credentials.");
   if (!instance.allowedEmails.length && !instance.allowedDomains.length)
     throw new Error("Configure an exact email or domain allowlist before deploying.");
+  instance.appOrigin = app.origin;
+  instance.renderOrigin = render.origin;
   return { instance, path, directory: dirname(path) };
 }
 export async function saveInstance(path: string, instance: Instance) {

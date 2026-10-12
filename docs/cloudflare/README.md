@@ -34,6 +34,8 @@ bun workers/scripts/deploy.ts /absolute/private/instance.json
 
 Provisioning is repeatable by resource name and refuses a conflicting stored database ID. It creates dedicated D1/R2 resources and generates render signing keys. Deployment requires configured Google credentials. The setup does not configure Google OAuth for you, buy a domain or opt into a Workers paid subscription.
 
+Hourly orphan cleanup is opt-in: set `cleanupCron: true` in the private instance configuration when the account has a free cron slot. The default uses no cron slots. Without the schedule, object cleanup after failed publications remains pending and those objects consume storage until cleanup runs.
+
 D1 and R2 free allowances are account-wide. R2 Standard bills overages. The foundation defaults to a 1 MiB HTML cap; it does not yet implement account-wide storage/operation budget enforcement. Monitor usage and cap retention before opening a large installation. Local tests do not prove production CPU fits Workers Free's 10 ms execution budget.
 
 ## Local verification
@@ -41,5 +43,13 @@ D1 and R2 free allowances are account-wide. R2 Standard bills overages. The foun
 Worker tests use actual Miniflare D1 and R2 and signed Google fixtures. They cover PKCE and state replay, admission policy, cookie/Origin rules, concurrent same-base version publication, grant revocation while uploading, failed publication cleanup, scoped comments, signed rendering and untrusted attribute escaping. Google tests mock the external token/JWKS endpoint; live Google login still needs real credentials.
 
 `workers/wrangler.*.example.jsonc` are local templates. For simultaneous local Workers, use different hostnames such as `localhost` and `127.0.0.1` as well as separate ports. Keep both on one shared persistence directory for R2. Provide generated development signing keys through external `.dev.vars` files beside private configs. Never use a same-hostname render origin as a production shortcut.
+
+An isolated loopback browser/CLI check is available after building:
+
+```sh
+SLASHDOCS_LOCAL_SMOKE=1 bun x tsx workers/scripts/local-smoke.ts
+```
+
+It seeds generic temporary identities, exercises the unchanged Go CLI, and serves a local browser fixture. Its fixture sign-in route is never part of either deployed Worker.
 
 The deployment scripts build the existing CLI for macOS/Linux arm64/amd64 and publish its installer/skill as static assets. CLI self-update signing/release automation remains to be configured separately.

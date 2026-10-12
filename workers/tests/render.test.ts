@@ -70,7 +70,16 @@ describe("isolated render worker", () => {
     const signed = await token("print");
     const response = await request(`/print/${document}/${version}`, signed);
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("slashdocs-print-bootstrap");
+    const html = await response.text();
+    expect(html).toContain("slashdocs-print-bootstrap");
+    expect(html).toContain("allow-modals");
+    expect(html).not.toContain("slashdocs:print-request");
+    expect(html).not.toContain("slashdocs-bootstrap");
+    const normal = await request(`/v/${document}/${version}`, await token());
+    const normalHTML = await normal.text();
+    expect(normalHTML).not.toContain("allow-modals");
+    expect(normalHTML).toContain("slashdocs:print-request");
+    expect(normalHTML).toContain("slashdocs:print-snapshot");
     expect(
       (
         await worker.fetch(

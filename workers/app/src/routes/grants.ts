@@ -62,12 +62,26 @@ grantRoutes.get("/v1/documents/:id/access", async (c) => {
   )
     .bind(docId)
     .all<GrantRow>();
-  for (const g of results)
+  const users = await c.env.DB.prepare(
+    "SELECT u.id,u.email,u.name,u.picture_url FROM users u WHERE EXISTS (SELECT 1 FROM document_grants g WHERE g.document_id=? AND g.principal_type='user' AND g.principal_id=u.id)",
+  )
+    .bind(docId)
+    .all<{ id: string; email: string; name: string; picture_url: string }>();
+  const principals = new Map(
+    users.results.map((user) => [user.id, { type: "user" as const, ...user }]),
+  );
+  for (const g of results) {
+    const grantee =
+      g.principal_type === "anyone"
+        ? { type: "anyone" as const, id: "" }
+        : principals.get(g.principal_id);
+    if (!grantee) throw new ApiError(404, "not_found", "User not found");
     items.push({
-      principal: await principal(c.env, g.principal_type, g.principal_id),
+      principal: grantee,
       effective_role: g.role,
       sources: [source(g.role, g.id)],
     });
+  }
   return c.json({ items, current_role: role });
 });
 grantRoutes.post("/v1/documents/:id/grants", async (c) => {

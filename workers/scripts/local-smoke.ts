@@ -93,10 +93,6 @@ await fixture.env.DB.prepare(
 )
   .bind(await hashToken(session), user.id, Math.floor(Date.now() / 1000) + 3600)
   .run();
-app.onError((error) => {
-  console.error(error.name, error.message);
-  return new Response("Local fixture request failed", { status: 500 });
-});
 const assetRoot = resolve("workers/dist/app");
 fixture.env.ASSETS = {
   async fetch(input: RequestInfo | URL, init?: RequestInit) {
@@ -109,8 +105,7 @@ fixture.env.ASSETS = {
       !(await stat(target).then(
         (s) => s.isFile(),
         () => false,
-      )) ||
-      !url.pathname.split("/").pop()?.includes(".")
+      ))
     )
       target = join(assetRoot, "index.html");
     return new Response(await readFile(target), {
@@ -173,7 +168,15 @@ const cli = runCLI(
     "--title",
     "Cloudflare smoke report",
   ],
-  { stdout: "pipe", stderr: "pipe", env: { ...process.env, SLASHDOCS_NO_UPDATE: "1" } },
+  {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      ...process.env,
+      SLASHDOCS_NO_UPDATE: "1",
+      XDG_CONFIG_HOME: join(tmp, "config"),
+    },
+  },
 );
 const code = await cli.exited;
 if (code !== 0) {
@@ -198,7 +201,15 @@ const pull = runCLI(
     "--out",
     join(tmp, "pulled.html"),
   ],
-  { stdout: "pipe", stderr: "pipe", env: { ...process.env, SLASHDOCS_NO_UPDATE: "1" } },
+  {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      ...process.env,
+      SLASHDOCS_NO_UPDATE: "1",
+      XDG_CONFIG_HOME: join(tmp, "config"),
+    },
+  },
 );
 if ((await pull.exited) !== 0) {
   console.error(await new Response(pull.stderr).text());
@@ -225,7 +236,15 @@ const push = runCLI(
     "--summary",
     "Clarify clock error",
   ],
-  { stdout: "pipe", stderr: "pipe", env: { ...process.env, SLASHDOCS_NO_UPDATE: "1" } },
+  {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: {
+      ...process.env,
+      SLASHDOCS_NO_UPDATE: "1",
+      XDG_CONFIG_HOME: join(tmp, "config"),
+    },
+  },
 );
 if ((await push.exited) !== 0) {
   console.error(await new Response(push.stderr).text());

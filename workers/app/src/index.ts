@@ -103,6 +103,26 @@ secured.delete("/v1/pins/:resource_type/:resource_id", async (c) => {
     .run();
   return c.body(null, 204);
 });
+secured.get("/v1/documents/:id/kv", async (c) => {
+  const id = c.req.param("id");
+  await requireDocument(c.env, c.get("actor"), id, "viewer");
+  const revision = await c.env.DB.prepare(
+    "SELECT revision FROM document_revisions WHERE document_id=?",
+  )
+    .bind(id)
+    .first<{ revision: number }>();
+  const { results } = await c.env.DB.prepare(
+    "SELECT key,value_json FROM document_kv WHERE document_id=? LIMIT 256",
+  )
+    .bind(id)
+    .all<{ key: string; value_json: string }>();
+  return c.json({
+    revision: revision?.revision ?? 0,
+    items: Object.fromEntries(
+      results.map((row) => [row.key, JSON.parse(row.value_json)]),
+    ),
+  });
+});
 secured.get("/v1/integrations/github", (c) =>
   c.json({ connected: false, configured: false }),
 );

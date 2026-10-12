@@ -34,6 +34,8 @@ configRoutes.get("/v1/config", (c) => {
     labels_enabled: false,
     capabilities: {
       mcp: false,
+      api_reference: false,
+      owner_managed_sharing: true,
       structured_mentions: false,
       folders: false,
       groups: false,
