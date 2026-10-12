@@ -1,0 +1,7 @@
+{
+  "name": "slashdocs-render-local",
+  "main": "render/src/index.ts",
+  "compatibility_date": "2026-07-30",
+  "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "slashdocs-files" }],
+  "vars": { "APP_ORIGIN": "http://localhost:8787" },
+}

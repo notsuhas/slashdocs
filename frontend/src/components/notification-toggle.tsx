@@ -1,3 +1,4 @@
+import { useCapability } from "@/lib/hooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellOff } from "lucide-react";
 import { toast } from "sonner";
@@ -8,9 +9,11 @@ import { cn } from "@/lib/cn";
 
 export function NotificationToggle({ documentId }: { documentId?: string }) {
   const qc = useQueryClient();
+  const notificationsEnabled = useCapability("notifications");
   const prefs = useQuery({
     queryKey: ["notifications", documentId || "global"],
     queryFn: () => api.notificationPreferences(documentId),
+    enabled: notificationsEnabled,
   });
   const update = useMutation({
     mutationFn: (enabled: boolean) =>
@@ -22,6 +25,7 @@ export function NotificationToggle({ documentId }: { documentId?: string }) {
       toast.error(errorMessage(e, "Could not save notification settings")),
   });
   const enabled = prefs.data?.enabled ?? false;
+  if (!notificationsEnabled) return null;
   const label = documentId ? "Notifications for this document" : "Slack notifications";
   const disabled = prefs.isLoading || !!prefs.error || update.isPending;
   const title = prefs.error

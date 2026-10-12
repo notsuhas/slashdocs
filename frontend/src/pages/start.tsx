@@ -1,3 +1,5 @@
+import { useCapability } from "@/lib/hooks";
+import { useEffect } from "react";
 import { useTitle } from "@/lib/use-title";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -27,6 +29,10 @@ const PATHS: { value: SetupPath; label: string }[] = [
 export function StartPage() {
   useTitle("Get started");
   const { state, setStep, setPath, skip } = useOnboarding();
+  const mcpEnabled = useCapability("mcp");
+  useEffect(() => {
+    if (!mcpEnabled && state.path === "mcp") setPath("cli");
+  }, [mcpEnabled, state.path, setPath]);
   const loginCmd = `slashdocs auth login ${publicURL()}`;
   const { done, total } = onboardingProgress(state);
   const nav = useNavigate();
@@ -90,7 +96,7 @@ export function StartPage() {
         label="Setup path"
         value={state.path}
         onChange={setPath}
-        options={PATHS}
+        options={mcpEnabled ? PATHS : PATHS.filter((p) => p.value === "cli")}
         className="enter mb-4"
       />
 

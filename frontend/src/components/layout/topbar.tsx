@@ -1,3 +1,4 @@
+import { useCapability } from "@/lib/hooks";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Bot,
@@ -68,6 +69,7 @@ export function AccountMenu({ user }: { user: Principal }) {
   const signOut = useSignOut();
   const { theme, setTheme } = useTheme();
   const { reset } = useOnboarding();
+  const botsEnabled = useCapability("service_accounts");
   return (
     <Dropdown>
       <DropdownTrigger asChild>
@@ -102,9 +104,11 @@ export function AccountMenu({ user }: { user: Principal }) {
         <DropdownItem onSelect={() => nav("/app/developers")}>
           <Terminal className="h-4 w-4" /> Developers
         </DropdownItem>
-        <DropdownItem onSelect={() => nav("/app/settings/service-accounts")}>
-          <Bot className="h-4 w-4" /> Bots
-        </DropdownItem>
+        {botsEnabled && (
+          <DropdownItem onSelect={() => nav("/app/settings/service-accounts")}>
+            <Bot className="h-4 w-4" /> Bots
+          </DropdownItem>
+        )}
         <DropdownSeparator />
         <DropdownLabel>Theme</DropdownLabel>
         {(

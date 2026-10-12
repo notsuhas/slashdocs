@@ -1,3 +1,5 @@
+> **Cloudflare port:** The `cloudflare` branch contains a Hono/D1/R2 publish-and-review foundation. See [Cloudflare setup and current limitations](docs/cloudflare/README.md). The documentation below describes the original Go deployment.
+
 # slashdocs
 
 [![CI](https://github.com/razorpay/slashdocs/actions/workflows/ci.yml/badge.svg)](https://github.com/razorpay/slashdocs/actions/workflows/ci.yml)
