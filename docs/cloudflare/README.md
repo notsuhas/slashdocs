@@ -55,3 +55,18 @@ SLASHDOCS_LOCAL_SMOKE=1 bun x tsx workers/scripts/local-smoke.ts
 It seeds generic temporary identities, exercises the unchanged Go CLI, and serves a local browser fixture. Its fixture sign-in route is never part of either deployed Worker.
 
 The deployment scripts build the existing CLI for macOS/Linux arm64/amd64 and publish its installer/skill as static assets. CLI self-update signing/release automation remains to be configured separately.
+
+## GitHub deployment
+
+The `Cloudflare` workflow validates pull requests and builds both Workers without credentials. Production deployment is opt-in: set repository variable `CLOUDFLARE_DEPLOY_ENABLED` to `true`, create a `production` environment allowing only the `main` branch, and store the complete provisioned private instance JSON as its `SLASHDOCS_INSTANCE_JSON` secret. Use a dedicated scoped Cloudflare token in that JSON; the global API key is never used by the workflow. The required permissions are Workers Scripts Write, D1 Write, Workers R2 Storage Write and Account Settings Read for the selected account, plus Workers Routes Write and Zone Read for the app's zone.
+
+After merging to `main`, CI must pass before the production job applies migrations, deploys the isolated renderer and app, installs Worker secrets, and checks readiness. Manual dispatch from `main` follows the same checks. Pull requests and other branches cannot deploy. Deployments are serialized and running production deployments are not canceled by newer commits. The workflow restores private files outside the checkout, masks configuration values, and removes those files afterward. Keep signing keys and resource IDs stable in the secret; CI provisioning must not generate a different key pair on each release. Renew a time-limited deployment token before it expires.
+
+To set the environment secret from an existing private file without putting its contents in shell arguments:
+
+```sh
+gh secret set SLASHDOCS_INSTANCE_JSON --env production --repo OWNER/slashdocs < /absolute/private/instance.json
+gh variable set CLOUDFLARE_DEPLOY_ENABLED --repo OWNER/slashdocs --body true
+```
+
+The workflow becomes available after its code reaches the relevant branch. This setup keeps the original Go CI and deployment target available; it does not merge or publish a pull request automatically.

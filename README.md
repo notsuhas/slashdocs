@@ -1,4 +1,4 @@
-> **Cloudflare port:** The `cloudflare` branch contains a Hono/D1/R2 publish-and-review foundation. See [Cloudflare setup and current limitations](docs/cloudflare/README.md). The documentation below describes the original Go deployment.
+> **Optional Cloudflare deployment:** A Hono/D1/R2 publish-and-review foundation is available alongside the Go server. See [Cloudflare setup and current limitations](docs/cloudflare/README.md). The documentation below describes the Go deployment.
 
 # slashdocs
 
