@@ -55,7 +55,10 @@ export default {
       capability = await verifyRenderCapability(env.RENDER_PUBLIC_KEY, token, audience);
       if (capability.document_id !== path[2] || capability.version_id !== path[3])
         throw new Error("scope mismatch");
-    } catch {
+    } catch (error) {
+      console.warn("render_capability_rejected", {
+        reason: error instanceof Error ? error.name : "UnknownError",
+      });
       return new Response("Invalid render capability", {
         status: 403,
         headers: responseHeaders,

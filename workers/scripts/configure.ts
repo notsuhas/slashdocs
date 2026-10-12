@@ -61,9 +61,12 @@ const app = {
 };
 const render = {
   ...shared,
+  workers_dev: new URL(instance.renderOrigin).hostname.endsWith(".workers.dev"),
   name: instance.renderWorkerName,
   main: resolve(root, "workers/render/src/index.ts"),
-  routes: [{ pattern: new URL(instance.renderOrigin).hostname, custom_domain: true }],
+  routes: new URL(instance.renderOrigin).hostname.endsWith(".workers.dev")
+    ? []
+    : [{ pattern: new URL(instance.renderOrigin).hostname, custom_domain: true }],
   r2_buckets: [{ binding: "DOCUMENTS", bucket_name: instance.bucketName }],
   vars: { APP_ORIGIN: instance.appOrigin, RENDER_PUBLIC_KEY: instance.renderPublicKey },
 };

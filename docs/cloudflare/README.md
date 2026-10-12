@@ -36,6 +36,8 @@ Provisioning is repeatable by resource name and refuses a conflicting stored dat
 
 Hourly orphan cleanup is opt-in: set `cleanupCron: true` in the private instance configuration when the account has a free cron slot. The default uses no cron slots. Without the schedule, object cleanup after failed publications remains pending and those objects consume storage until cleanup runs.
 
+The renderer can use its free `https://<renderWorkerName>.<account-subdomain>.workers.dev` address instead of a custom domain. Set that address as `renderOrigin` in private configuration; configuration enables the renderer's workers.dev route and creates no custom-domain route for it. This avoids inheriting custom-zone browser challenges and parent-domain cookies. The app can still use its custom domain. Signed capabilities remain mandatory. If a custom renderer domain returns an empty edge 403 before reaching the Worker, check the zone's security settings rather than weakening token validation.
+
 D1 and R2 free allowances are account-wide. R2 Standard bills overages. The foundation defaults to a 1 MiB HTML cap; it does not yet implement account-wide storage/operation budget enforcement. Monitor usage and cap retention before opening a large installation. Local tests do not prove production CPU fits Workers Free's 10 ms execution budget.
 
 ## Local verification
