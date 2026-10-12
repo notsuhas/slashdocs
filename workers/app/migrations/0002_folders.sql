@@ -51,23 +51,25 @@ DROP TABLE pins;
 ALTER TABLE pins_v2 RENAME TO pins;
 -- Triggers validate the tree in the same serialized SQLite write as the mutation.
 -- No read-then-write cycle/depth check can race a concurrent re-parent.
+-- Parenthesize CASE expressions: remote D1 can mistake bare CASE END; for
+-- the trigger terminator (cloudflare/workers-sdk#4727).
 CREATE TRIGGER folders_insert_depth BEFORE INSERT ON folders WHEN NEW.parent_folder_id IS NOT NULL BEGIN
- SELECT CASE WHEN (WITH RECURSIVE a(id,parent,depth) AS (
+ SELECT (CASE WHEN (WITH RECURSIVE a(id,parent,depth) AS (
   SELECT id,parent_folder_id,1 FROM folders WHERE id=NEW.parent_folder_id
   UNION ALL SELECT f.id,f.parent_folder_id,a.depth+1 FROM folders f JOIN a ON f.id=a.parent WHERE a.depth<64
- ) SELECT COALESCE(MAX(depth),0) FROM a)>=15 THEN RAISE(ABORT,'folder_depth_conflict') END;
+ ) SELECT COALESCE(MAX(depth),0) FROM a)>=15 THEN RAISE(ABORT,'folder_depth_conflict') END);
 END;
 CREATE TRIGGER folders_update_tree BEFORE UPDATE OF parent_folder_id ON folders WHEN NEW.parent_folder_id IS NOT NULL BEGIN
- SELECT CASE WHEN EXISTS(WITH RECURSIVE a(id,parent,depth) AS (
+ SELECT (CASE WHEN EXISTS(WITH RECURSIVE a(id,parent,depth) AS (
   SELECT id,parent_folder_id,1 FROM folders WHERE id=NEW.parent_folder_id
   UNION ALL SELECT f.id,f.parent_folder_id,a.depth+1 FROM folders f JOIN a ON f.id=a.parent WHERE a.depth<64
- ) SELECT 1 FROM a WHERE id=NEW.id) THEN RAISE(ABORT,'folder_cycle_conflict') END;
- SELECT CASE WHEN (WITH RECURSIVE a(id,parent,depth) AS (
+ ) SELECT 1 FROM a WHERE id=NEW.id) THEN RAISE(ABORT,'folder_cycle_conflict') END);
+ SELECT (CASE WHEN (WITH RECURSIVE a(id,parent,depth) AS (
   SELECT id,parent_folder_id,1 FROM folders WHERE id=NEW.parent_folder_id
   UNION ALL SELECT f.id,f.parent_folder_id,a.depth+1 FROM folders f JOIN a ON f.id=a.parent WHERE a.depth<64
  ), s(id,depth) AS (
   SELECT OLD.id,1 UNION ALL SELECT f.id,s.depth+1 FROM folders f JOIN s ON f.parent_folder_id=s.id WHERE s.depth<64
- ) SELECT (SELECT COALESCE(MAX(depth),0) FROM a)+(SELECT MAX(depth) FROM s))>15 THEN RAISE(ABORT,'folder_depth_conflict') END;
+ ) SELECT (SELECT COALESCE(MAX(depth),0) FROM a)+(SELECT MAX(depth) FROM s))>15 THEN RAISE(ABORT,'folder_depth_conflict') END);
 END;
 -- Foreign-owned children survive deletion and keep their descendants. Rename
 -- only when their owner's root already contains the case-insensitive title.
