@@ -27,7 +27,7 @@ versionRoutes.post("/v1/documents/:id/versions", async (c) => {
 versionRoutes.get("/v1/documents/:id/versions", async (c) => {
   await requireDocument(c.env, c.get("actor"), c.req.param("id"), "viewer");
   const { results } = await c.env.DB.prepare(
-    "SELECT v.*,u.email AS creator_email,u.name AS creator_name,u.picture_url AS creator_picture_url FROM versions v LEFT JOIN users u ON u.id=v.created_by_user_id WHERE v.document_id=? ORDER BY v.number DESC",
+    "SELECT v.*,u.provider AS creator_provider,u.email AS creator_email,u.name AS creator_name,u.picture_url AS creator_picture_url FROM versions v LEFT JOIN users u ON u.id=v.created_by_user_id WHERE v.document_id=? ORDER BY v.number DESC",
   )
     .bind(c.req.param("id"))
     .all<VersionWithCreator>();

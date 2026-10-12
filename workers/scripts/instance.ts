@@ -1,6 +1,6 @@
 import { readFile, realpath, open, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, resolve, relative, isAbsolute } from "node:path";
+import { dirname, resolve, relative, isAbsolute, sep } from "node:path";
 import { z } from "zod";
 export const instanceSchema = z.object({
   accountId: z.string().regex(/^[a-f0-9]{32}$/),
@@ -34,11 +34,57 @@ export const instanceSchema = z.object({
   cleanupCron: z.boolean().default(false),
   googleClientId: z.string().optional(),
   googleClientSecret: z.string().optional(),
+  oidcIssuer: z.string().url().optional(),
+  oidcInternalIssuer: z.string().url().optional(),
+  oidcProviderName: z.string().optional(),
+  oidcClientId: z.string().optional(),
+  oidcClientSecret: z.string().optional(),
+  githubClientId: z.string().optional(),
+  githubClientSecret: z.string().optional(),
+  googleGroupsEnabled: z.boolean().default(false),
+  googleGroupsCustomerId: z.string().optional(),
+  googleGroupsServiceAccount: z.string().optional(),
+  slackBotToken: z.string().optional(),
+  labelsEnabled: z.boolean().default(false),
+  maxHTMLBytes: z
+    .number()
+    .int()
+    .min(1)
+    .max(50 * 1024 * 1024)
+    .default(50 * 1024 * 1024),
   sessionSecret: z.string().optional(),
   renderPrivateKey: z.string().optional(),
   renderPublicKey: z.string().optional(),
 });
 export type Instance = z.infer<typeof instanceSchema>;
+export function validateLoginConfiguration(
+  instance: Pick<
+    Instance,
+    | "googleClientId"
+    | "googleClientSecret"
+    | "oidcIssuer"
+    | "oidcInternalIssuer"
+    | "oidcClientId"
+    | "oidcClientSecret"
+  >,
+) {
+  const generic = !!(
+    instance.oidcIssuer ||
+    instance.oidcInternalIssuer ||
+    instance.oidcClientId ||
+    instance.oidcClientSecret
+  );
+  const google = !!(instance.googleClientId || instance.googleClientSecret);
+  if (
+    (generic && google) ||
+    (generic
+      ? !instance.oidcIssuer || !instance.oidcClientId || !instance.oidcClientSecret
+      : !instance.googleClientId || !instance.googleClientSecret)
+  )
+    throw new Error(
+      "Configure one complete Google or generic OIDC provider in private instance configuration.",
+    );
+}
 export async function loadInstance(
   file = process.env.SLASHDOCS_INSTANCE_CONFIG ??
     resolve(homedir(), ".config/slashdocs-cloudflare/instance.json"),
@@ -46,7 +92,7 @@ export async function loadInstance(
   const path = await realpath(file);
   const repository = await realpath(process.cwd());
   const rel = relative(repository, path);
-  if (!rel.startsWith("..") && !isAbsolute(rel))
+  if (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
     throw new Error("Real instance configuration must be outside the repository.");
   const instance = instanceSchema.parse(JSON.parse(await readFile(path, "utf8")));
   const app = new URL(instance.appOrigin),

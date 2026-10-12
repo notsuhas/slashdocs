@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { loadMigrationStatements } from "../scripts/read-migrations";
 import { build } from "esbuild";
 import { exportJWK, generateKeyPair } from "jose";
 import { Miniflare } from "miniflare";
@@ -14,6 +14,7 @@ describe("actual workerd app and render integration", () => {
           bundle: true,
           format: "esm",
           platform: "neutral",
+          mainFields: ["module", "main"],
           target: "es2022",
           write: false,
         });
@@ -36,6 +37,9 @@ describe("actual workerd app and render integration", () => {
           compatibilityFlags: ["nodejs_compat"],
           d1Databases: { DB: "workerd-db" },
           r2Buckets: { DOCUMENTS: "workerd-documents" },
+          durableObjects: {
+            DOCUMENT_REALTIME: { className: "DocumentRealtime", useSQLite: true },
+          },
           serviceBindings: { ASSETS: "assets" },
           bindings: {
             APP_ORIGIN: appOrigin,
@@ -65,17 +69,12 @@ describe("actual workerd app and render integration", () => {
     });
     try {
       const db = await mf.getD1Database("DB", "app");
-      const migration = await readFile(
-        new URL("../app/migrations/0001_core.sql", import.meta.url),
-        "utf8",
-      );
-      for (const statement of migration
-        .split(";")
-        .map((s) => s.trim())
-        .filter(Boolean))
+      for (const statement of await loadMigrationStatements())
         await db.prepare(statement).run();
       await db
-        .prepare("INSERT INTO users VALUES (?,?,?,?,?,?,?)")
+        .prepare(
+          "INSERT INTO users(id,provider,provider_subject,email,name,picture_url,created_at) VALUES (?,?,?,?,?,?,?)",
+        )
         .bind(
           "usr_workerd",
           "google",
@@ -103,7 +102,7 @@ describe("actual workerd app and render integration", () => {
       const auth = { Authorization: `Bearer ${credential}` };
       const config = await app.fetch(`${appOrigin}/v1/config`);
       expect(config.status).toBe(200);
-      expect(await config.json()).toMatchObject({ capabilities: { folders: false } });
+      expect(await config.json()).toMatchObject({ capabilities: { folders: true } });
       const root = await app.fetch(appOrigin);
       expect(root.status).toBe(200);
       expect(root.headers.get("Content-Security-Policy")).toContain(

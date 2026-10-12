@@ -207,7 +207,7 @@ describe("authentication with D1", () => {
     ) {
       const start = await request(path);
       const state = new URL(start.headers.get("Location")!).searchParams.get("state")!;
-      const cookie = start.headers.get("Set-Cookie")!.split(";")[0];
+      const cookie = start.headers.get("Set-Cookie")?.split(";")[0];
       currentToken = await new SignJWT({
         email: "person@example.com",
         email_verified: true,
@@ -222,7 +222,7 @@ describe("authentication with D1", () => {
         .setExpirationTime("5m")
         .sign(privateKey);
       return request(`/v1/auth/google/callback?state=${state}&code=code`, {
-        headers: { Cookie: cookie },
+        headers: cookie ? { Cookie: cookie } : {},
       });
     }
     expect((await login({ email_verified: false })).status).toBe(401);
@@ -267,16 +267,16 @@ describe("authentication with D1", () => {
     expect(result.status).toBe(200);
     expect(await result.json()).toEqual({ items: [] });
   });
-  it("reports supported discovery and disabled foundation capabilities", async () => {
+  it("reports supported discovery and implemented capabilities", async () => {
     expect(await (await request("/.well-known/slashdocs.json")).json()).toEqual({
       name: "slashdocs",
       api_version: "v1",
-      auth: { modes: ["web", "cli"] },
+      auth: { modes: ["web", "cli", "mcp"] },
     });
     const config = (await (await request("/v1/config")).json()) as {
       capabilities: { folders: boolean; refresh: string };
     };
-    expect(config.capabilities.folders).toBe(false);
-    expect(config.capabilities.refresh).toBe("polling");
+    expect(config.capabilities.folders).toBe(true);
+    expect(config.capabilities.refresh).toBe("sse");
   });
 });

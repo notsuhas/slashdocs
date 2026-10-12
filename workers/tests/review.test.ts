@@ -5,6 +5,7 @@ import type { AppEnv } from "../app/src/env";
 import { ApiError } from "../shared/errors";
 import { commentRoutes } from "../app/src/routes/comments";
 import { createTestEnv, seedUser } from "./runtime";
+import { createFolder, moveDocument } from "../app/src/services/folders";
 
 const commentDTO = z.object({
   id: z.string(),
@@ -109,6 +110,53 @@ describe("document review permissions and DTOs", () => {
     expect(response.status).toBe(201);
     return commentDTO.parse(await response.json());
   }
+  it("uses inherited folder access for comment writes and rejects writes after revocation", async () => {
+    const owner = {
+      principal: { type: "user" as const, id: "usr_owner" },
+      credentialKind: "session" as const,
+    };
+    const folder = await createFolder(runtime.env, owner, "Reviews");
+    await moveDocument(runtime.env, owner, "doc_aaaaaaaa", folder.id);
+    await runtime.env.DB.prepare("DELETE FROM document_grants WHERE document_id=?")
+      .bind("doc_aaaaaaaa")
+      .run();
+    await runtime.env.DB.prepare(
+      "INSERT INTO folder_grants(id,folder_id,principal_type,principal_id,role,granted_by_type,granted_by_id) VALUES('inherited',?,'user','usr_commenter','commenter','user','usr_owner')",
+    )
+      .bind(folder.id)
+      .run();
+    const response = await call(
+      "doc_aaaaaaaa/comments",
+      "POST",
+      { version_id: "ver_aaaaaaaa", body: "Inherited", anchor: { quote: "this" } },
+      "usr_commenter",
+    );
+    expect(response.status).toBe(201);
+    const comment = commentDTO.parse(await response.json());
+    await runtime.env.DB.prepare(
+      "DELETE FROM folder_grants WHERE id='inherited'",
+    ).run();
+    expect(
+      (
+        await call(
+          `doc_aaaaaaaa/comments/${comment.id}`,
+          "PATCH",
+          { body: "Revoked" },
+          "usr_commenter",
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await call(
+          "doc_aaaaaaaa/comments",
+          "POST",
+          { version_id: "ver_aaaaaaaa", body: "Denied", anchor: { quote: "this" } },
+          "usr_commenter",
+        )
+      ).status,
+    ).toBe(403);
+  });
   it("creates anchored threads and replies with empty mentions/reactions; validates version and parent document membership", async () => {
     expect(
       (
@@ -190,7 +238,7 @@ describe("document review permissions and DTOs", () => {
     expect(reopened.status).toBe("open");
     expect(reopened.resolved_at).toBeUndefined();
   });
-  it("confines idempotent reactions to the named document and refuses unsupported mentions", async () => {
+  it("confines idempotent reactions to the named document and enforces structured mention media types", async () => {
     const root = await create();
     expect(
       (await call(`doc_bbbbbbbb/comments/${root.id}/reactions/heart`, "PUT")).status,
@@ -215,7 +263,7 @@ describe("document review permissions and DTOs", () => {
           ],
         })
       ).status,
-    ).toBe(400);
+    ).toBe(415);
   });
   it("removes only author-owned threads and blocks subsequent mutation of deleted or inaccessible comments", async () => {
     const root = await create();

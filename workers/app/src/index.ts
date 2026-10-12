@@ -9,18 +9,34 @@ import { documentRoutes } from "./routes/documents";
 import { versionRoutes } from "./routes/versions";
 import { grantRoutes } from "./routes/grants";
 import { commentRoutes } from "./routes/comments";
-import { requireDocument, viewerPredicate } from "./services/permissions";
+import { folderRoutes } from "./routes/folders";
+import { browseRoutes } from "./routes/browse";
+import { stateRoutes } from "./routes/state";
+import { serviceAccountRoutes } from "./routes/service-accounts";
+export { DocumentSearch } from "./realtime/document-search";
+export { DocumentRealtime } from "./realtime/document-realtime";
+export { NotificationDelivery } from "./notifications/delivery";
+import { createMCPRoutes } from "./mcp";
+import { withInternalActor } from "./auth/internal-actor";
+import { oidcSettings } from "./auth/oidc";
+import { notificationRoutes } from "./routes/notifications";
+import { githubRoutes } from "./routes/github";
+import { googleGroupRoutes } from "./routes/google-groups";
+import { labelRoutes } from "./routes/labels";
+import { z } from "zod";
+import { activityRateLimit } from "./auth/activity-limit";
 export const app = new Hono<AppEnv>();
 app.use("*", async (c, next) => {
   await next();
   c.header("X-Content-Type-Options", "nosniff");
-  c.header("Referrer-Policy", "no-referrer");
+  if (!c.res.headers.has("Referrer-Policy")) c.header("Referrer-Policy", "no-referrer");
   c.header("X-Frame-Options", "DENY");
   if (c.req.path.startsWith("/v1/") || c.req.path.startsWith("/.well-known/"))
     c.header("Cache-Control", "private, no-store");
   if (
     c.res.headers.get("Content-Type")?.includes("text/html") &&
-    !c.req.path.endsWith("/html")
+    !c.req.path.endsWith("/html") &&
+    !c.res.headers.has("Content-Security-Policy")
   )
     c.header(
       "Content-Security-Policy",
@@ -54,100 +70,61 @@ app.onError((error) => {
 app.get("/livez", (c) => c.json({ status: "ok" }));
 app.get("/readyz", async (c) => {
   await c.env.DB.prepare("SELECT 1").first();
+  let loginConfigured = false;
+  try {
+    const provider = oidcSettings(c.env);
+    loginConfigured = !!(provider.clientId && provider.clientSecret);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 503) throw error;
+  }
   return c.json({
     status: "ok",
-    login_configured: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+    login_configured: loginConfigured,
   });
 });
 app.route("/", configRoutes);
 app.route("/", authRoutes);
 const secured = new Hono<AppEnv>();
 secured.use("/v1/*", requireAuth);
+const activityLimit = activityRateLimit();
+for (const path of [
+  "/v1/me/notifications",
+  "/v1/documents/:id/notifications",
+  "/v1/documents/:id/headings",
+  "/v1/documents/:id/link",
+])
+  secured.on(["GET", "PUT"], path, activityLimit);
+secured.post("/v1/documents/:id/access-requests", activityLimit);
+secured.post("/v1/documents/:id/presence", activityRateLimit());
 secured.route("/", documentRoutes);
 secured.route("/", versionRoutes);
 secured.route("/", grantRoutes);
 secured.route("/", commentRoutes);
-secured.get("/v1/folders", (c) => c.json({ items: [], has_more: false }));
-secured.get("/v1/featured", (c) => c.json({ items: [] }));
-secured.get("/v1/pins", async (c) => {
-  const actor = c.get("actor");
-  const { results } = await c.env.DB.prepare(
-    `SELECT p.resource_type,p.resource_id FROM pins p JOIN documents d ON d.id=p.resource_id WHERE p.user_id=? AND d.deleted_at IS NULL AND ${viewerPredicate}`,
-  )
-    .bind(actor.principal.id, actor.principal.id, actor.principal.id)
-    .all();
-  return c.json({ items: results });
-});
-secured.put("/v1/pins/:resource_type/:resource_id", async (c) => {
-  if (c.req.param("resource_type") !== "document")
-    throw new ApiError(400, "bad_request", "Only document pins are supported");
-  const actor = c.get("actor"),
-    id = c.req.param("resource_id");
-  await requireDocument(c.env, actor, id, "viewer");
-  await c.env.DB.prepare(
-    `INSERT OR IGNORE INTO pins(user_id,resource_type,resource_id) SELECT ?,'document',d.id FROM documents d WHERE d.id=? AND d.deleted_at IS NULL AND ${viewerPredicate}`,
-  )
-    .bind(actor.principal.id, id, actor.principal.id, actor.principal.id)
-    .run();
-  return c.body(null, 204);
-});
-secured.delete("/v1/pins/:resource_type/:resource_id", async (c) => {
-  await c.env.DB.prepare(
-    "DELETE FROM pins WHERE user_id=? AND resource_type=? AND resource_id=?",
-  )
-    .bind(
-      c.get("actor").principal.id,
-      c.req.param("resource_type"),
-      c.req.param("resource_id"),
-    )
-    .run();
-  return c.body(null, 204);
-});
-secured.get("/v1/documents/:id/kv", async (c) => {
-  const id = c.req.param("id");
-  await requireDocument(c.env, c.get("actor"), id, "viewer");
-  const revision = await c.env.DB.prepare(
-    "SELECT revision FROM document_revisions WHERE document_id=?",
-  )
-    .bind(id)
-    .first<{ revision: number }>();
-  const { results } = await c.env.DB.prepare(
-    "SELECT key,value_json FROM document_kv WHERE document_id=? LIMIT 256",
-  )
-    .bind(id)
-    .all<{ key: string; value_json: string }>();
-  return c.json({
-    revision: revision?.revision ?? 0,
-    items: Object.fromEntries(
-      results.map((row) => [row.key, JSON.parse(row.value_json)]),
-    ),
-  });
-});
-secured.get("/v1/integrations/github", (c) =>
-  c.json({ connected: false, configured: false }),
-);
-secured.get("/v1/me/notifications", (c) =>
-  c.json({ enabled: false, effective_enabled: false }),
-);
-secured.get("/v1/documents/:id/notifications", async (c) => {
-  await requireDocument(c.env, c.get("actor"), c.req.param("id"), "viewer");
-  return c.json({ enabled: false, effective_enabled: false });
-});
+secured.route("/", folderRoutes);
+secured.route("/", browseRoutes);
+secured.route("/", stateRoutes);
+secured.route("/", serviceAccountRoutes);
+secured.route("/", notificationRoutes);
+secured.route("/", githubRoutes);
+secured.route("/", googleGroupRoutes);
+secured.route("/", labelRoutes);
 app.route("/", secured);
+const apiDocs = new Hono<AppEnv>();
+for (const path of ["/api-docs", "/api-docs/*", "/openapi.json"])
+  apiDocs.use(path, requireAuth);
+apiDocs.get("/api-docs", (c) => c.redirect("/api-docs/index.html", 302));
+apiDocs.get("/api-docs/*", (c) => c.env.ASSETS.fetch(c.req.raw));
+apiDocs.get("/openapi.json", (c) => c.env.ASSETS.fetch(c.req.raw));
+app.route("/", apiDocs);
 app.all("/v1/*", () => {
-  throw new ApiError(
-    501,
-    "feature_unavailable",
-    "This feature is not available in the Cloudflare foundation release",
-  );
+  throw new ApiError(404, "not_found", "Unknown API route");
 });
-app.all("/mcp", () => {
-  throw new ApiError(
-    501,
-    "feature_unavailable",
-    "Remote MCP is not available in the Cloudflare foundation release",
-  );
-});
+app.route(
+  "/",
+  createMCPRoutes((env, actor, request) =>
+    withInternalActor(request, actor, async () => app.fetch(request, env)),
+  ),
+);
 app.get("/install.sh", (c) =>
   c.text(
     INSTALL_SCRIPT.replaceAll("__BASE_URL__", new URL(c.env.APP_ORIGIN).origin),
@@ -159,6 +136,38 @@ app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: AppEnv["Bindings"]) {
+    if (!env.DOCUMENT_SEARCH)
+      throw new Error("Document search binding is not configured");
+    const response = await env.DOCUMENT_SEARCH.get(
+      env.DOCUMENT_SEARCH.idFromName("maintenance"),
+    ).fetch("https://search.internal/index", {
+      method: "POST",
+      body: JSON.stringify({ after: "" }),
+    });
+    if (!response.ok) throw new Error("Source metadata backfill failed");
+    const indexed = z
+      .object({ indexed: z.number(), failed: z.array(z.string()) })
+      .parse(await response.json());
+    if (indexed.failed.length)
+      console.warn(
+        JSON.stringify({
+          event: "source_index_backfill_failed",
+          version_ids: indexed.failed,
+        }),
+      );
+    const now = Math.floor(Date.now() / 1000);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM mcp_tokens WHERE expires_at<=?").bind(now),
+      env.DB.prepare("DELETE FROM mcp_codes WHERE expires_at<=?").bind(now),
+      env.DB.prepare("DELETE FROM mcp_consent WHERE expires_at<=?").bind(now),
+      env.DB.prepare(
+        "DELETE FROM mcp_clients WHERE expires_at<=? AND NOT EXISTS(SELECT 1 FROM mcp_codes WHERE client_id=mcp_clients.id)",
+      ).bind(now),
+      env.DB.prepare("DELETE FROM github_oauth_states WHERE expires_at<=?").bind(now),
+      env.DB.prepare(
+        "DELETE FROM document_events WHERE kind='presence' AND updated_at<?",
+      ).bind(new Date(Date.now() - 600000).toISOString()),
+    ]);
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { results } = await env.DB.prepare(
       "SELECT object_key FROM orphan_objects o WHERE created_at<? AND NOT EXISTS (SELECT 1 FROM versions v WHERE v.object_key=o.object_key) LIMIT 10",

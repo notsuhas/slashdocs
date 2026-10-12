@@ -1,195 +1,200 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppEnv, Env } from "../env";
-import type { Principal, EffectiveAccessItem } from "../../../shared/contracts";
+import type { AppEnv, Env, Role } from "../env";
+import type { Principal } from "../../../shared/contracts";
 import { newId } from "../../../shared/ids";
 import { ApiError } from "../../../shared/errors";
-import { requireDocument } from "../services/permissions";
-const roleSchema = z.enum(["viewer", "commenter", "editor"]);
+import { requireDocument, commenterPredicateFor } from "../services/permissions";
+import { effectiveAccess } from "../services/folders";
+import {
+  canonicalGrantPrincipal,
+  grantInputSchema,
+  resolveGrantPrincipal,
+} from "../services/grant-principals";
+import {
+  snapshotGrantNotificationStatements,
+  captureNotificationMutation,
+  queuedGrantNotificationStatements,
+  clearNotificationMutation,
+  wakeNotificationDelivery,
+} from "../services/notifications";
+
+async function wakeGrantNotifications(env: Env) {
+  await wakeNotificationDelivery(env).catch(() => {
+    console.warn(
+      JSON.stringify({ event: "notification_wake_failed", source: "document_grant" }),
+    );
+  });
+}
 interface GrantRow {
   id: string;
   document_id: string;
-  principal_type: "user" | "anyone";
+  principal_type: Principal["type"];
   principal_id: string;
-  role: "viewer" | "commenter" | "editor";
+  role: Exclude<Role, "owner">;
   granted_by_user_id: string;
 }
-async function principal(
-  env: Env,
-  type: "user" | "anyone",
-  id: string,
-): Promise<Principal> {
-  if (type === "anyone") return { type: "anyone", id: "" };
-  const user = await env.DB.prepare(
-    "SELECT id,email,name,picture_url FROM users WHERE id=?",
-  )
-    .bind(id)
-    .first<{ id: string; email: string; name: string; picture_url: string }>();
-  if (!user) throw new ApiError(404, "not_found", "User not found");
-  return { type: "user", ...user };
-}
 async function grantDTO(env: Env, g: GrantRow) {
+  const by = await env.DB.prepare("SELECT provider FROM users WHERE id=?")
+    .bind(g.granted_by_user_id)
+    .first<{ provider: string }>();
   return {
     id: g.id,
     document_id: g.document_id,
     resource_type: "document",
     resource_id: g.document_id,
-    principal: await principal(env, g.principal_type, g.principal_id),
+    principal: await canonicalGrantPrincipal(env, g.principal_type, g.principal_id),
     role: g.role,
-    granted_by: await principal(env, "user", g.granted_by_user_id),
+    granted_by: await canonicalGrantPrincipal(
+      env,
+      by?.provider === "service_account" ? "service_account" : "user",
+      g.granted_by_user_id,
+    ),
   };
 }
 export const grantRoutes = new Hono<AppEnv>();
 grantRoutes.get("/v1/documents/:id/access", async (c) => {
-  const docId = c.req.param("id"),
-    { document, role } = await requireDocument(c.env, c.get("actor"), docId, "viewer");
-  const source = (r: string, grant?: string) => ({
-    resource_type: "document",
-    resource_id: docId,
-    resource_title: document.title,
-    role: r,
-    ...(grant ? { grant_id: grant } : {}),
+  const id = c.req.param("id");
+  const { role } = await requireDocument(c.env, c.get("actor"), id, "viewer");
+  return c.json({
+    items: await effectiveAccess(c.env, "document", id),
+    current_role: role,
   });
-  const items: EffectiveAccessItem[] = [
-    {
-      principal: await principal(c.env, "user", document.owner_user_id),
-      effective_role: "owner",
-      sources: [source("owner")],
-    },
-  ];
-  const { results } = await c.env.DB.prepare(
-    "SELECT * FROM document_grants WHERE document_id=? ORDER BY id",
-  )
-    .bind(docId)
-    .all<GrantRow>();
-  const users = await c.env.DB.prepare(
-    "SELECT u.id,u.email,u.name,u.picture_url FROM users u WHERE EXISTS (SELECT 1 FROM document_grants g WHERE g.document_id=? AND g.principal_type='user' AND g.principal_id=u.id)",
-  )
-    .bind(docId)
-    .all<{ id: string; email: string; name: string; picture_url: string }>();
-  const principals = new Map(
-    users.results.map((user) => [user.id, { type: "user" as const, ...user }]),
-  );
-  for (const g of results) {
-    const grantee =
-      g.principal_type === "anyone"
-        ? { type: "anyone" as const, id: "" }
-        : principals.get(g.principal_id);
-    if (!grantee) throw new ApiError(404, "not_found", "User not found");
-    items.push({
-      principal: grantee,
-      effective_role: g.role,
-      sources: [source(g.role, g.id)],
-    });
-  }
-  return c.json({ items, current_role: role });
 });
 grantRoutes.post("/v1/documents/:id/grants", async (c) => {
-  const docId = c.req.param("id"),
+  const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireDocument(c.env, actor, docId, "owner");
-  const input = z
-    .object({
-      role: roleSchema,
-      address: z.string().optional(),
-      principal: z
-        .object({
-          type: z.enum(["user", "anyone"]),
-          id: z.string().optional(),
-          email: z.string().optional(),
-        })
-        .optional(),
-    })
-    .parse(await c.req.json());
-  const type = input.principal?.type ?? "user";
-  let id = "";
-  if (type === "user") {
-    const email = input.address ?? input.principal?.email;
-    const user = email
-      ? await c.env.DB.prepare("SELECT id FROM users WHERE lower(email)=lower(?)")
-          .bind(email)
-          .first<{ id: string }>()
-      : await c.env.DB.prepare("SELECT id FROM users WHERE id=?")
-          .bind(input.principal?.id ?? "")
-          .first<{ id: string }>();
-    if (!user)
-      throw new ApiError(
-        400,
-        "bad_request",
-        "No SlashDocs user exists for that email or id. Ask them to sign in once.",
-      );
-    id = user.id;
-  }
-  if (id === actor.principal.id)
-    throw new ApiError(400, "bad_request", "Owner already has access");
-  const grantId = newId("grt");
-  await c.env.DB.batch([
+  await requireDocument(c.env, actor, id, "commenter");
+  const input = grantInputSchema.parse(await c.req.json()),
+    principal = await resolveGrantPrincipal(c.env, input);
+  const token = newId("nmt");
+  const snapshots = snapshotGrantNotificationStatements(c.env, id, principal, token);
+  const casIndex = snapshots.length;
+  const result = await c.env.DB.batch([
+    ...snapshots,
     c.env.DB.prepare(
-      "INSERT INTO document_grants (id,document_id,principal_type,principal_id,role,granted_by_user_id) SELECT ?,id,?,?,?,? FROM documents WHERE id=? AND owner_user_id=? AND deleted_at IS NULL ON CONFLICT(document_id,principal_type,principal_id) DO UPDATE SET role=excluded.role,granted_by_user_id=excluded.granted_by_user_id",
+      `INSERT INTO document_grants(id,document_id,principal_type,principal_id,role,granted_by_user_id) SELECT COALESCE((SELECT grant_id FROM grant_identities WHERE resource_type='document' AND resource_id=d.id AND principal_type=? AND principal_id=?),?),d.id,?,?,?,? FROM documents d WHERE d.id=? AND d.deleted_at IS NULL AND ${commenterPredicateFor(c.env)} ON CONFLICT(document_id,principal_type,principal_id) DO UPDATE SET role=excluded.role,granted_by_user_id=excluded.granted_by_user_id`,
     ).bind(
-      grantId,
-      type,
-      id,
+      principal.type,
+      principal.id,
+      newId("grt"),
+      principal.type,
+      principal.id,
       input.role,
       actor.principal.id,
-      docId,
+      id,
+      actor.principal.id,
       actor.principal.id,
     ),
+    captureNotificationMutation(c.env, token),
     c.env.DB.prepare(
-      "UPDATE documents SET access_revision=access_revision+1 WHERE id=? AND owner_user_id=? AND deleted_at IS NULL",
-    ).bind(docId, actor.principal.id),
+      "UPDATE documents SET access_revision=access_revision+1 WHERE id=? AND EXISTS(SELECT 1 FROM notification_mutation_guards WHERE token=? AND allowed>0)",
+    ).bind(id, token),
+    ...queuedGrantNotificationStatements(c.env, actor.principal, token),
+    ...clearNotificationMutation(c.env, token),
   ]);
-  const g = await c.env.DB.prepare(
+  if (!result[casIndex].meta.changes)
+    throw new ApiError(403, "forbidden", "commenter role required");
+  await wakeGrantNotifications(c.env);
+  const grant = await c.env.DB.prepare(
     "SELECT * FROM document_grants WHERE document_id=? AND principal_type=? AND principal_id=?",
   )
-    .bind(docId, type, id)
+    .bind(id, principal.type, principal.id)
     .first<GrantRow>();
-  if (!g) throw new ApiError(404, "not_found", "Document not found");
+  if (!grant) throw new ApiError(404, "not_found", "Grant not found");
   return c.json(
     {
-      id: g.id,
-      resource: { type: "document", id: docId },
-      principal: await principal(c.env, type, id),
-      role: g.role,
+      id: grant.id,
+      resource: { type: "document", id },
+      principal,
+      role: grant.role,
       granted_by: { id: actor.principal.id, email: actor.principal.email ?? "" },
     },
     201,
   );
 });
 grantRoutes.patch("/v1/documents/:id/grants/:grant_id", async (c) => {
-  const docId = c.req.param("id"),
+  const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireDocument(c.env, actor, docId, "owner");
-  const input = z.object({ role: roleSchema }).parse(await c.req.json());
-  const result = await c.env.DB.batch([
-    c.env.DB.prepare(
-      "UPDATE document_grants SET role=? WHERE id=? AND document_id=? AND EXISTS (SELECT 1 FROM documents WHERE id=? AND owner_user_id=? AND deleted_at IS NULL)",
-    ).bind(input.role, c.req.param("grant_id"), docId, docId, actor.principal.id),
-    c.env.DB.prepare(
-      "UPDATE documents SET access_revision=access_revision+1 WHERE id=? AND owner_user_id=?",
-    ).bind(docId, actor.principal.id),
-  ]);
-  if (!result[0].meta.changes) throw new ApiError(404, "not_found", "Grant not found");
-  const g = await c.env.DB.prepare(
+  await requireDocument(c.env, actor, id, "commenter");
+  const input = z
+    .object({ role: z.enum(["viewer", "commenter", "editor"]) })
+    .parse(await c.req.json());
+  const storedGrant = await c.env.DB.prepare(
     "SELECT * FROM document_grants WHERE id=? AND document_id=?",
   )
-    .bind(c.req.param("grant_id"), docId)
+    .bind(c.req.param("grant_id"), id)
     .first<GrantRow>();
-  if (!g) throw new ApiError(404, "not_found", "Grant not found");
-  return c.json(await grantDTO(c.env, g));
+  if (!storedGrant) throw new ApiError(404, "not_found", "Grant not found");
+  const principal = await canonicalGrantPrincipal(
+    c.env,
+    storedGrant.principal_type,
+    storedGrant.principal_id,
+  );
+  const token = newId("nmt");
+  const snapshots = snapshotGrantNotificationStatements(c.env, id, principal, token);
+  const casIndex = snapshots.length;
+  const result = await c.env.DB.batch([
+    ...snapshots,
+    c.env.DB.prepare(
+      `UPDATE document_grants SET role=? WHERE id=? AND document_id=? AND EXISTS(SELECT 1 FROM documents d WHERE d.id=document_grants.document_id AND d.deleted_at IS NULL AND ${commenterPredicateFor(c.env)})`,
+    ).bind(
+      input.role,
+      c.req.param("grant_id"),
+      id,
+      actor.principal.id,
+      actor.principal.id,
+    ),
+    captureNotificationMutation(c.env, token),
+    c.env.DB.prepare(
+      "UPDATE documents SET access_revision=access_revision+1 WHERE id=? AND EXISTS(SELECT 1 FROM notification_mutation_guards WHERE token=? AND allowed>0)",
+    ).bind(id, token),
+    ...queuedGrantNotificationStatements(c.env, actor.principal, token),
+    ...clearNotificationMutation(c.env, token),
+  ]);
+  if (!result[casIndex].meta.changes)
+    throw new ApiError(404, "not_found", "Grant not found");
+  await wakeGrantNotifications(c.env);
+  const grant = await c.env.DB.prepare(
+    "SELECT * FROM document_grants WHERE id=? AND document_id=?",
+  )
+    .bind(c.req.param("grant_id"), id)
+    .first<GrantRow>();
+  if (!grant) throw new ApiError(404, "not_found", "Grant not found");
+  return c.json(await grantDTO(c.env, grant));
 });
 grantRoutes.delete("/v1/documents/:id/grants/:grant_id", async (c) => {
-  const docId = c.req.param("id"),
+  const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireDocument(c.env, actor, docId, "owner");
-  const results = await c.env.DB.batch([
+  await requireDocument(c.env, actor, id, "commenter");
+  const storedGrant = await c.env.DB.prepare(
+    "SELECT * FROM document_grants WHERE id=? AND document_id=?",
+  )
+    .bind(c.req.param("grant_id"), id)
+    .first<GrantRow>();
+  if (!storedGrant) throw new ApiError(404, "not_found", "Grant not found");
+  const principal = await canonicalGrantPrincipal(
+    c.env,
+    storedGrant.principal_type,
+    storedGrant.principal_id,
+  );
+  const token = newId("nmt");
+  const snapshots = snapshotGrantNotificationStatements(c.env, id, principal, token);
+  const casIndex = snapshots.length;
+  const result = await c.env.DB.batch([
+    ...snapshots,
     c.env.DB.prepare(
-      "DELETE FROM document_grants WHERE id=? AND document_id=? AND EXISTS (SELECT 1 FROM documents WHERE id=? AND owner_user_id=? AND deleted_at IS NULL)",
-    ).bind(c.req.param("grant_id"), docId, docId, actor.principal.id),
+      `DELETE FROM document_grants WHERE id=? AND document_id=? AND EXISTS(SELECT 1 FROM documents d WHERE d.id=document_grants.document_id AND d.deleted_at IS NULL AND ${commenterPredicateFor(c.env)})`,
+    ).bind(c.req.param("grant_id"), id, actor.principal.id, actor.principal.id),
+    captureNotificationMutation(c.env, token),
     c.env.DB.prepare(
-      "UPDATE documents SET access_revision=access_revision+1 WHERE id=? AND owner_user_id=?",
-    ).bind(docId, actor.principal.id),
+      "UPDATE documents SET access_revision=access_revision+1 WHERE id=? AND EXISTS(SELECT 1 FROM notification_mutation_guards WHERE token=? AND allowed>0)",
+    ).bind(id, token),
+    ...queuedGrantNotificationStatements(c.env, actor.principal, token),
+    ...clearNotificationMutation(c.env, token),
   ]);
-  if (!results[0].meta.changes) throw new ApiError(404, "not_found", "Grant not found");
+  if (!result[casIndex].meta.changes)
+    throw new ApiError(404, "not_found", "Grant not found");
+  await wakeGrantNotifications(c.env);
   return c.body(null, 204);
 });

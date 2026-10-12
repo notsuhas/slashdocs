@@ -10,6 +10,12 @@
     "run_worker_first": [
       "/v1/*",
       "/.well-known/*",
+      "/mcp",
+      "/mcp/*",
+      "/oauth/*",
+      "/api-docs",
+      "/api-docs/*",
+      "/openapi.json",
       "/livez",
       "/readyz",
       "/install.sh",
@@ -29,6 +35,23 @@
     },
   ],
   "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "slashdocs-files" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "DOCUMENT_REALTIME", "class_name": "DocumentRealtime" },
+      { "name": "DOCUMENT_SEARCH", "class_name": "DocumentSearch" },
+      { "name": "NOTIFICATION_DELIVERY", "class_name": "NotificationDelivery" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "DocumentRealtime",
+        "NotificationDelivery",
+        "DocumentSearch",
+      ],
+    },
+  ],
   "vars": {
     "APP_ORIGIN": "http://localhost:8787",
     "RENDER_ORIGIN": "http://127.0.0.1:8788",

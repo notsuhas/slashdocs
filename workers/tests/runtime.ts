@@ -1,17 +1,34 @@
-import { readFile } from "node:fs/promises";
+import { loadMigrationStatements } from "../scripts/read-migrations";
 import { Miniflare } from "miniflare";
 import type { Env } from "../app/src/env";
 import { exportJWK, generateKeyPair } from "jose";
+import { build } from "esbuild";
+let realtimeBundle: Promise<string> | undefined;
 export async function createTestEnv(overrides: Record<string, string> = {}) {
+  realtimeBundle ||= build({
+    stdin: {
+      contents: `export { DocumentRealtime } from './workers/app/src/realtime/document-realtime.ts'; export default {fetch(){return new Response("test")}};`,
+      resolveDir: process.cwd(),
+    },
+    bundle: true,
+    write: false,
+    format: "esm",
+    platform: "neutral",
+    mainFields: ["module", "main"],
+    target: "es2022",
+  }).then((result) => result.outputFiles[0].text);
   const { publicKey, privateKey } = await generateKeyPair("EdDSA", {
     extractable: true,
   });
   const mf = new Miniflare({
     modules: true,
-    script: 'export default {fetch(){return new Response("test")}}',
+    script: await realtimeBundle,
     compatibilityDate: "2026-07-30",
     d1Databases: ["DB"],
     r2Buckets: ["DOCUMENTS"],
+    durableObjects: {
+      DOCUMENT_REALTIME: { className: "DocumentRealtime", useSQLite: true },
+    },
     bindings: {
       APP_ORIGIN: "https://app.example.com",
       RENDER_ORIGIN: "https://render.example.com",
@@ -23,15 +40,7 @@ export async function createTestEnv(overrides: Record<string, string> = {}) {
     },
   });
   const env = await mf.getBindings<Env>();
-  const migration = await readFile(
-    new URL("../app/migrations/0001_core.sql", import.meta.url),
-    "utf8",
-  );
-  // The D1 exec API accepts one statement per line; execute the schema as explicit statements.
-  for (const statement of migration
-    .split(";")
-    .map((s) => s.trim())
-    .filter(Boolean))
+  for (const statement of await loadMigrationStatements())
     await env.DB.prepare(statement).run();
   return { env, mf, dispose: () => mf.dispose() };
 }

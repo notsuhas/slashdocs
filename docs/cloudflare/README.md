@@ -1,16 +1,26 @@
-# Cloudflare foundation
+# Cloudflare deployment
 
 This branch ports SlashDocs' server to TypeScript/Hono on Cloudflare Workers. It retains the React frontend, browser annotation bridge and Go CLI. The original Go server remains available; this is a separate deployment target.
 
-The first release implements Google browser/CLI authentication, configurable exact-email and domain admission, document publishing, immutable versions with stale-write conflicts, direct sharing, anchored comments/replies/reactions, source download and isolated rendering. The UI uses visibility-aware polling for updates.
+The Worker backend implements the upstream document, folder, sharing, comment,
+state, service-account, OIDC, MCP and integration APIs. Nested folder grants,
+structured mentions, full-text search, labels, notifications and SSE presence use
+D1 and SQLite Durable Objects. All 49 MCP tools delegate to the same HTTP handlers.
+Provider integrations remain optional and require their normal credentials.
 
-Not yet ported: nested folders/inherited grants, full-text search, service accounts, generic OIDC, remote MCP, structured mentions, notification delivery, GitHub/Google Groups integrations, shared document state and realtime presence. Search currently matches document titles. Direct sharing is owner-managed in this foundation. Unsupported controls are capability-gated where integrated; do not describe this branch as full upstream parity.
+The compatibility reference and review ledger are in [PARITY.md](PARITY.md).
+Search implements PostgreSQL English stemming, query operators, ranking and
+snippets, with recorded PostgreSQL comparison fixtures. Specialized lexer and
+locale behavior and storage concurrency differences are described in the
+[metadata](parity-metadata-contract.md) and [comment](comments-parity.md) contracts.
 
 ## Private configuration
 
 Copy `workers/instance.example.json` to a path **outside the repository**, such as `~/.config/slashdocs-cloudflare/instance.json`, and restrict it to your user. Never put a real instance config, credential, hostname or email allowlist in Git. Tools reject real instance configuration inside the checkout. Only `.example` files are tracked.
 
-Configure your Cloudflare account/scoped API token, two separate HTTPS hostnames, allowed emails/domains and a Google OAuth Web client. Google must register `<app-origin>/v1/auth/google/callback`. Blank admission configuration denies login; matching one configured exact email OR domain allows verified Google identities. Do not allow an entire public email-provider domain to admit a single address.
+Configure your Cloudflare account/scoped API token, two separate HTTPS hostnames, allowed emails/domains and one login provider. Use `googleClientId`/`googleClientSecret` for Google or `oidcIssuer`/`oidcClientId`/`oidcClientSecret` for generic OIDC. Optional `oidcInternalIssuer` rebases discovery, token and JWKS traffic; `oidcProviderName` controls the login label. Register `<app-origin>/v1/auth/google/callback` for Google or `<app-origin>/v1/auth/oidc/callback` for OIDC. Blank admission configuration denies login; matching one configured exact email OR domain allows verified Google identities. Do not allow an entire public email-provider domain to admit a single address.
+
+Optional integration configuration uses `githubClientId`/`githubClientSecret`, `slackBotToken`, and `googleGroupsEnabled`/`googleGroupsCustomerId`/`googleGroupsServiceAccount`. The group credential is a JSON string; its optional `subject` enables domain delegation. `labelsEnabled` defaults to false, matching upstream.
 
 The app Worker owns D1 and a private R2 bucket. The separate render Worker receives R2 and only a render verification public key. No session, Google secret or app signing private key enters uploaded HTML or the render Worker. Application cookies are host-only. Scoped render capabilities expire; protected responses are private/no-store.
 
@@ -32,13 +42,13 @@ bun workers/scripts/configure.ts /absolute/private/instance.json
 bun workers/scripts/deploy.ts /absolute/private/instance.json
 ```
 
-Provisioning is repeatable by resource name and refuses a conflicting stored database ID. It creates dedicated D1/R2 resources and generates render signing keys. Deployment requires configured Google credentials. The setup does not configure Google OAuth for you, buy a domain or opt into a Workers paid subscription.
+Provisioning is repeatable by resource name and refuses a conflicting stored database ID. It creates dedicated D1/R2 resources and generates render signing keys. Deployment requires one complete Google or generic OIDC provider. The setup does not configure Google OAuth for you, buy a domain or opt into a Workers paid subscription.
 
-Hourly orphan cleanup is opt-in: set `cleanupCron: true` in the private instance configuration when the account has a free cron slot. The default uses no cron slots. Without the schedule, object cleanup after failed publications remains pending and those objects consume storage until cleanup runs.
+Hourly orphan cleanup, expired OAuth cleanup and incremental source indexing are opt-in: set `cleanupCron: true` in the private instance configuration when the account has a free cron slot. The default uses no cron slots. Without the schedule, object cleanup after failed publications remains pending and those objects consume storage until cleanup runs.
 
 The renderer can use its free `https://<renderWorkerName>.<account-subdomain>.workers.dev` address instead of a custom domain. Set that address as `renderOrigin` in private configuration; configuration enables the renderer's workers.dev route and creates no custom-domain route for it. This avoids inheriting custom-zone browser challenges and parent-domain cookies. The app can still use its custom domain. Signed capabilities remain mandatory. If a custom renderer domain returns an empty edge 403 before reaching the Worker, check the zone's security settings rather than weakening token validation.
 
-D1 and R2 free allowances are account-wide. R2 Standard bills overages. The foundation defaults to a 1 MiB HTML cap; it does not yet implement account-wide storage/operation budget enforcement. Monitor usage and cap retention before opening a large installation. Local tests do not prove production CPU fits Workers Free's 10 ms execution budget.
+D1 and R2 free allowances are account-wide. R2 Standard bills overages. The API defaults to the upstream 50 MiB HTML limit; private `maxHTMLBytes` can lower it. Account-wide storage/operation budget enforcement is not implemented. Monitor usage and cap retention before opening a large installation. Local tests do not prove production CPU fits Workers Free's 10 ms execution budget.
 
 ## Local verification
 
@@ -54,13 +64,13 @@ SLASHDOCS_LOCAL_SMOKE=1 bun x tsx workers/scripts/local-smoke.ts
 
 It seeds generic temporary identities, exercises the unchanged Go CLI, and serves a local browser fixture. Its fixture sign-in route is never part of either deployed Worker.
 
-The deployment scripts build the existing CLI for macOS/Linux arm64/amd64 and publish its installer/skill as static assets. CLI self-update signing/release automation remains to be configured separately.
+The deployment scripts build the existing CLI for macOS/Linux arm64/amd64 and publish its installer/skill as static assets. CLI self-update signing/release automation remains separate from Worker deployment.
 
 ## GitHub deployment
 
 The `Cloudflare` workflow validates pull requests and builds both Workers without credentials. Production deployment is opt-in: set repository variable `CLOUDFLARE_DEPLOY_ENABLED` to `true`, create a `production` environment allowing only the `main` branch, and store the complete provisioned private instance JSON as its `SLASHDOCS_INSTANCE_JSON` secret. Use a dedicated scoped Cloudflare token in that JSON; the global API key is never used by the workflow. The required permissions are Workers Scripts Write, D1 Write, Workers R2 Storage Write and Account Settings Read for the selected account, plus Workers Routes Write and Zone Read for the app's zone.
 
-After merging to `main`, CI must pass before the production job applies migrations, deploys the isolated renderer and app, installs Worker secrets, and checks readiness. Manual dispatch from `main` follows the same checks. Pull requests and other branches cannot deploy. Deployments are serialized and running production deployments are not canceled by newer commits. The workflow restores private files outside the checkout, masks configuration values, and removes those files afterward. Keep signing keys and resource IDs stable in the secret; CI provisioning must not generate a different key pair on each release. Renew a time-limited deployment token before it expires.
+After merging to `main`, CI must pass before the production job applies migrations, deploys the isolated renderer, then uploads the app code, configuration and complete secret set together with Wrangler `--secrets-file`, checks readiness, and backfills old current-version search metadata in batches of twenty. Absent optional credentials are uploaded as empty secrets to reset previous values in the same app version. Omitted secrets would be preserved, so deployment never deletes or updates secrets on the active version separately. The temporary authenticated backfill Worker forwards indexing to the app’s private SQLite Durable Object binding and is removed afterward. Manual dispatch from `main` follows the same checks. Pull requests and other branches cannot deploy. Deployments are serialized and running production deployments are not canceled by newer commits. The workflow restores private files outside the checkout, masks configuration values, and removes those files afterward. Keep signing keys and resource IDs stable in the secret; CI provisioning must not generate a different key pair on each release. Renew a time-limited deployment token before it expires.
 
 To set the environment secret from an existing private file without putting its contents in shell arguments:
 

@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import { ApiError } from "../../../shared/errors";
 export function maxHTMLBytes(env: Env) {
-  const max = Number(env.MAX_HTML_BYTES ?? 1048576);
+  const max = Number(env.MAX_HTML_BYTES ?? 50 * 1024 * 1024);
   if (!Number.isSafeInteger(max) || max < 1)
     throw new ApiError(500, "configuration_error", "Invalid upload limit");
   return max;

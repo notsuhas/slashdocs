@@ -1,6 +1,7 @@
 import { afterEach, describe, it, expect } from "vitest";
 import { app } from "../app/src/index";
 import { createTestEnv, seedUser } from "./runtime";
+import { createMCPRuntime } from "./mcp-runtime";
 import { hashToken } from "../app/src/auth/tokens";
 import { createDocument } from "../app/src/services/documents";
 const cleanups: Array<() => Promise<void>> = [];
@@ -25,7 +26,9 @@ describe("integrated app boundaries", () => {
     expect(await api.json()).toMatchObject({ error: { code: "unauthorized" } });
   });
   it("hydrates bridge state without exposing private source or credentials", async () => {
-    const fixture = await createTestEnv();
+    const fixture = await createMCPRuntime();
+    const request = (path: string, init: RequestInit = {}) =>
+      fixture.fetch(`https://app.example.com${path}`, init);
     cleanups.push(fixture.dispose);
     const user = await seedUser(fixture.env);
     const token = "slashdocs_cli_fixturevalidtoken";
@@ -48,33 +51,27 @@ describe("integrated app boundaries", () => {
       "private",
     );
     const headers = { Authorization: `Bearer ${token}` };
-    const snapshot = await app.request(
-      `/v1/documents/${doc.id}/kv`,
-      { headers },
-      fixture.env,
-    );
+    const snapshot = await request(`/v1/documents/${doc.id}/kv`, { headers });
     expect(await snapshot.json()).toEqual({ revision: 0, items: {} });
-    const source = await app.request(
+    const source = await request(
       `/v1/documents/${doc.id}/versions/${doc.current_version_id}/html`,
       { headers },
-      fixture.env,
     );
     expect(source.status).toBe(200);
     expect(source.headers.get("content-disposition")).toContain("attachment");
     expect(source.headers.get("content-security-policy")).toContain(
       "sandbox; default-src 'none'",
     );
-    const unsupported = await app.request(
-      `/v1/documents/${doc.id}/kv`,
-      {
-        method: "PATCH",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ set: { key: "value" } }),
-      },
-      fixture.env,
-    );
-    expect(unsupported.status).toBe(501);
-    const noAuth = await app.request(`/v1/documents/${doc.id}/kv`, {}, fixture.env);
+    const updated = await request(`/v1/documents/${doc.id}/kv`, {
+      method: "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ set: { key: "value" } }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({ revision: 1 });
+    const persisted = await request(`/v1/documents/${doc.id}/kv`, { headers });
+    expect(await persisted.json()).toEqual({ revision: 1, items: { key: "value" } });
+    const noAuth = await request(`/v1/documents/${doc.id}/kv`);
     expect(noAuth.status).toBe(401);
   });
 });

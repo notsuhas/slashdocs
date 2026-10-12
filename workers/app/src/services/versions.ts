@@ -1,9 +1,12 @@
 import type { Actor, Env } from "../env";
 import type { Version } from "../../../shared/contracts";
+import { lookupPrincipal, principalFromIdentity } from "./principals";
 import { newId } from "../../../shared/ids";
 import { ApiError } from "../../../shared/errors";
-import { requireDocument, editorPredicate } from "./permissions";
+import { requireDocument, editorPredicateFor } from "./permissions";
 import { storeSource, discardSource } from "./content";
+import { sourceMetadataStatements } from "./source-metadata";
+import { announceDocumentEvent } from "./state";
 export interface VersionRow {
   id: string;
   document_id: string;
@@ -17,6 +20,7 @@ export interface VersionRow {
   created_at: string;
 }
 export interface VersionWithCreator extends VersionRow {
+  creator_provider: string | null;
   creator_email: string | null;
   creator_name: string | null;
   creator_picture_url: string | null;
@@ -29,25 +33,17 @@ export function joinedVersionDTO(v: VersionWithCreator): Version {
     sha256: v.sha256,
     change_summary: v.change_summary,
     created_at: v.created_at,
-    created_by: {
-      type: "user",
+    created_by: principalFromIdentity({
       id: v.created_by_user_id,
-      ...(v.creator_email !== null
-        ? {
-            email: v.creator_email,
-            name: v.creator_name ?? "",
-            picture_url: v.creator_picture_url ?? "",
-          }
-        : {}),
-    },
+      provider: v.creator_provider ?? undefined,
+      email: v.creator_email,
+      name: v.creator_name,
+      picture_url: v.creator_picture_url,
+    }),
   };
 }
 export async function versionDTO(env: Env, v: VersionRow): Promise<Version> {
-  const user = await env.DB.prepare(
-    "SELECT id,email,name,picture_url FROM users WHERE id=?",
-  )
-    .bind(v.created_by_user_id)
-    .first<{ id: string; email: string; name: string; picture_url: string }>();
+  const creator = await lookupPrincipal(env, v.created_by_user_id);
   return {
     id: v.id,
     document_id: v.document_id,
@@ -55,9 +51,7 @@ export async function versionDTO(env: Env, v: VersionRow): Promise<Version> {
     sha256: v.sha256,
     change_summary: v.change_summary,
     created_at: v.created_at,
-    created_by: user
-      ? { type: "user", ...user }
-      : { type: "user", id: v.created_by_user_id },
+    created_by: creator,
   };
 }
 export async function getVersion(
@@ -97,7 +91,7 @@ export async function createVersion(
   try {
     const result = await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO versions (id,document_id,number,base_version_id,object_key,sha256,byte_length,change_summary,created_by_user_id,created_at) SELECT ?,d.id,(SELECT COALESCE(MAX(number),0)+1 FROM versions WHERE document_id=d.id),?,?,?,?,?,?,? FROM documents d WHERE d.id=? AND d.deleted_at IS NULL AND d.current_version_id=? AND ${editorPredicate}`,
+        `INSERT INTO versions (id,document_id,number,base_version_id,object_key,sha256,byte_length,change_summary,created_by_user_id,created_at) SELECT ?,d.id,(SELECT COALESCE(MAX(number),0)+1 FROM versions WHERE document_id=d.id),?,?,?,?,?,?,? FROM documents d WHERE d.id=? AND d.deleted_at IS NULL AND d.current_version_id=? AND ${editorPredicateFor(env)}`,
       ).bind(
         id,
         base,
@@ -118,6 +112,7 @@ export async function createVersion(
       env.DB.prepare(
         "DELETE FROM orphan_objects WHERE object_key=? AND EXISTS (SELECT 1 FROM versions WHERE id=?)",
       ).bind(key, id),
+      ...sourceMetadataStatements(env, id, bytes),
     ]);
     if (!result[0].meta.changes) {
       await discardSource(env, key);
@@ -125,6 +120,7 @@ export async function createVersion(
       throw conflict(latest.document.current_version_id);
     }
     const row = await getVersion(env, actor, docId, id);
+    await announceDocumentEvent(env, actor, docId, "document");
     return {
       id,
       number: row.number,

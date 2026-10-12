@@ -1,7 +1,9 @@
 function serve(options: {
   hostname: string;
   port: number;
-  fetch: (request: Request) => Response | Promise<Response>;
+  fetch: (
+    request: Request,
+  ) => Response | RuntimeResponse | Promise<Response | RuntimeResponse>;
 }) {
   const server = createServer(async (req, res) => {
     try {
@@ -20,7 +22,18 @@ function serve(options: {
       );
       const response = await options.fetch(request);
       res.writeHead(response.status, Object.fromEntries(response.headers));
-      res.end(Buffer.from(await response.arrayBuffer()));
+      const reader = response.body?.getReader();
+      res.on("close", () => {
+        void reader?.cancel().catch(() => {});
+      });
+      if (reader)
+        for (;;) {
+          const next = await reader.read();
+          if (next.done) break;
+          if (!res.write(Buffer.from(next.value)))
+            await new Promise<void>((resolve) => res.once("drain", resolve));
+        }
+      res.end();
     } catch (error) {
       console.error(error instanceof Error ? error.message : "Fixture server failed");
       res.writeHead(500);
@@ -64,16 +77,47 @@ import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve, join, sep } from "node:path";
-import { createTestEnv, seedUser } from "../tests/runtime";
+import { seedUser } from "../tests/runtime";
+import { createMCPRuntime } from "../tests/mcp-runtime";
+import type { Response as RuntimeResponse } from "miniflare";
 import { hashToken } from "../app/src/auth/tokens";
-import { app } from "../app/src/index";
-import render from "../render/src/index";
 if (process.env.SLASHDOCS_LOCAL_SMOKE !== "1")
   throw new Error("Set SLASHDOCS_LOCAL_SMOKE=1 to run isolated loopback fixtures.");
-const fixture = await createTestEnv({
-  APP_ORIGIN: "http://localhost:8890",
-  RENDER_ORIGIN: "http://127.0.0.1:8891",
-});
+const assetRoot = resolve("workers/dist/app");
+const fixture = await createMCPRuntime(
+  {
+    APP_ORIGIN: "http://localhost:8890",
+    RENDER_ORIGIN: "http://127.0.0.1:8891",
+  },
+  {
+    render: true,
+    assets: async (request: { url: string }) => {
+      const url = new URL(request.url);
+      let target = resolve(assetRoot, "." + decodeURIComponent(url.pathname));
+      if (target !== assetRoot && !target.startsWith(assetRoot + sep))
+        return new Response("Not found", { status: 404 });
+      if (
+        !(await stat(target).then(
+          (s) => s.isFile(),
+          () => false,
+        ))
+      )
+        target = join(assetRoot, "index.html");
+      return new Response(await readFile(target), {
+        headers: {
+          "Content-Type": target.endsWith(".html")
+            ? "text/html"
+            : target.endsWith(".js")
+              ? "text/javascript"
+              : target.endsWith(".css")
+                ? "text/css"
+                : "application/octet-stream",
+        },
+      });
+    },
+  },
+);
+const renderWorker = await fixture.mf.getWorker("render");
 const user = await seedUser(fixture.env, "usr_smokefixture", "owner@example.com");
 const cliToken = "slashdocs_cli_" + crypto.randomUUID().replaceAll("-", "");
 const session = crypto.randomUUID() + crypto.randomUUID();
@@ -93,38 +137,10 @@ await fixture.env.DB.prepare(
 )
   .bind(await hashToken(session), user.id, Math.floor(Date.now() / 1000) + 3600)
   .run();
-const assetRoot = resolve("workers/dist/app");
-fixture.env.ASSETS = {
-  async fetch(input: RequestInfo | URL, init?: RequestInit) {
-    const request = input instanceof Request ? input : new Request(input, init);
-    const url = new URL(request.url);
-    let target = resolve(assetRoot, "." + decodeURIComponent(url.pathname));
-    if (target !== assetRoot && !target.startsWith(assetRoot + sep))
-      return new Response("Not found", { status: 404 });
-    if (
-      !(await stat(target).then(
-        (s) => s.isFile(),
-        () => false,
-      ))
-    )
-      target = join(assetRoot, "index.html");
-    return new Response(await readFile(target), {
-      headers: {
-        "Content-Type": target.endsWith(".html")
-          ? "text/html"
-          : target.endsWith(".js")
-            ? "text/javascript"
-            : target.endsWith(".css")
-              ? "text/css"
-              : "application/octet-stream",
-      },
-    });
-  },
-};
 serve({
   hostname: "localhost",
   port: 8890,
-  fetch: (request) =>
+  fetch: async (request) =>
     new URL(request.url).pathname === "/__smoke__/login"
       ? new Response(null, {
           status: 302,
@@ -133,16 +149,24 @@ serve({
             "Set-Cookie": `slashdocs_session=${session}; HttpOnly; SameSite=Lax; Path=/`,
           },
         })
-      : app.fetch(request, fixture.env),
+      : fixture.fetch(request.url, {
+          method: request.method,
+          headers: Object.fromEntries(request.headers),
+          ...(["GET", "HEAD"].includes(request.method)
+            ? {}
+            : { body: await request.arrayBuffer() }),
+        }),
 });
 serve({
   hostname: "127.0.0.1",
   port: 8891,
-  fetch: (request) =>
-    render.fetch(request, {
-      DOCUMENTS: fixture.env.DOCUMENTS,
-      APP_ORIGIN: fixture.env.APP_ORIGIN,
-      RENDER_PUBLIC_KEY: fixture.env.RENDER_PUBLIC_KEY,
+  fetch: async (request) =>
+    renderWorker.fetch(request.url, {
+      method: request.method,
+      headers: Object.fromEntries(request.headers),
+      ...(["GET", "HEAD"].includes(request.method)
+        ? {}
+        : { body: await request.arrayBuffer() }),
     }),
 });
 const tmp = await mkdtemp(join(tmpdir(), "slashdocs-cli-smoke-"));

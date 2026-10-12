@@ -64,13 +64,15 @@ describe("D1 list query budgets", () => {
           ),
         db
           .prepare(
-            "INSERT INTO comments(id,document_id,created_on_version_id,author_user_id,body,anchor_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT INTO comments(id,document_id,created_on_version_id,author_user_id,author_email,author_name,body,anchor_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
           )
           .bind(
             `cmt_${i}`,
             "doc_0",
             "ver_0",
             `usr_${i}`,
+            `reader${i}@example.com`,
+            "Test Reader",
             `Comment ${i}`,
             '{"quote":"hello"}',
             "2026-01-01",
@@ -107,13 +109,13 @@ describe("D1 list query budgets", () => {
       }),
     };
     const items = await listDocuments(env, actor, "");
-    expect(items).toHaveLength(60);
+    expect(items).toHaveLength(25);
     expect(items.every((item) => item.owner?.email === "reader@example.com")).toBe(
       true,
     );
     expect(count).toHaveBeenCalledTimes(1);
   });
-  it("hydrates 60 comment authors and reactions in three statements", async () => {
+  it("hydrates 60 comment authors, mentions and reactions in four statements", async () => {
     const db = runtime.env.DB;
     const count = vi.fn((query: string) => db.prepare(query));
     const env = {
@@ -124,7 +126,7 @@ describe("D1 list query budgets", () => {
         },
       }),
     };
-    const items = await listComments(env, actor, "doc_0", "all", "ver_0");
+    const items = await listComments(env, actor, "doc_0", "", "ver_0");
     expect(items).toHaveLength(60);
     expect(
       items.every(
@@ -134,7 +136,7 @@ describe("D1 list query budgets", () => {
           item.reactions[0].reactors?.[0]?.email === item.author.email,
       ),
     ).toBe(true);
-    expect(count).toHaveBeenCalledTimes(3);
+    expect(count).toHaveBeenCalledTimes(4);
   });
   it("hydrates 61 version creators and 60 access principals within the Free budget", async () => {
     const app = new Hono<AppEnv>();

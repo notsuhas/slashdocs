@@ -1,11 +1,9 @@
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadInstance } from "./instance";
+import { z } from "zod";
+import { loadInstance, validateLoginConfiguration } from "./instance";
 const { instance, directory, path } = await loadInstance(process.argv[2]);
-if (!instance.googleClientId || !instance.googleClientSecret)
-  throw new Error(
-    "Set Google OAuth client ID and secret in private instance configuration before deployment.",
-  );
+validateLoginConfiguration(instance);
 const env = {
   ...process.env,
   CLOUDFLARE_ACCOUNT_ID: instance.accountId,
@@ -33,18 +31,25 @@ run([
   app,
 ]);
 run(["x", "wrangler", "deploy", "--config", render]);
-run(["x", "wrangler", "deploy", "--config", app]);
+// Upload code, complete configuration and every credential in one version.
+// Empty optional secrets replace old values; omitted secrets would be preserved.
 run([
   "x",
   "wrangler",
-  "secret",
-  "bulk",
-  resolve(directory, "app-secrets.json"),
+  "deploy",
   "--config",
   app,
+  "--secrets-file",
+  resolve(directory, "app-secrets.json"),
 ]);
 const response = await fetch(`${instance.appOrigin}/readyz`);
-if (!response.ok) throw new Error("Deployment readiness check failed.");
+if (
+  !response.ok ||
+  !z.object({ login_configured: z.boolean() }).parse(await response.json())
+    .login_configured
+)
+  throw new Error("Deployment readiness check failed.");
+run(["workers/scripts/backfill-source.ts", path]);
 console.info(
-  "Cloudflare deployment completed. Verify Google login and the publish/review workflow in the browser.",
+  "Cloudflare deployment completed. Verify login and the publish/review workflow in the browser.",
 );

@@ -9,7 +9,7 @@ on:
       - 'workers/**'
       - 'frontend/**'
       - 'cli/**'
-      - 'api/internal/server/downloads.go'
+      - 'api/**'
       - 'internal/**'
       - 'skills/**'
       - 'go.mod'
@@ -24,7 +24,7 @@ on:
       - 'workers/**'
       - 'frontend/**'
       - 'cli/**'
-      - 'api/internal/server/downloads.go'
+      - 'api/**'
       - 'internal/**'
       - 'skills/**'
       - 'go.mod'
@@ -41,7 +41,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Cloudflare foundation
+    name: Cloudflare parity
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -68,8 +68,8 @@ jobs:
           bun run --cwd frontend lint
           bun run --cwd frontend format:check
           bun run --cwd frontend test
-      - name: Test retained Go CLI
-        run: go test ./cli/...
+      - name: Test retained Go API and CLI contracts
+        run: go test ./api/... ./cli/...
       - name: Build deployable assets and CLI binaries
         run: bun run build:cloudflare
       - name: Bundle both Workers without credentials

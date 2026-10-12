@@ -172,7 +172,7 @@ it("serves source only as attachment and scopes signed render URLs to the versio
     ).status,
   ).toBe(404);
 });
-it("keeps listing and title search permission scoped and refuses unsupported syntax", async () => {
+it("keeps document text and owner search permission scoped", async () => {
   const { env, actor } = await fixture();
   await createDocument(
     env,
@@ -190,9 +190,9 @@ it("keeps listing and title search permission scoped and refuses unsupported syn
   ).toEqual({ items: [] });
   expect(
     (await app(reader).request("/v1/documents?q=from:owner", {}, env)).status,
-  ).toBe(400);
+  ).toBe(200);
 });
-it("lets only owners manage direct grants and preserves access response", async () => {
+it("lets commenters create grants and preserves access response", async () => {
   const { env, actor } = await fixture();
   const doc = await createDocument(
     env,
@@ -236,7 +236,7 @@ it("lets only owners manage direct grants and preserves access response", async 
         env,
       )
     ).status,
-  ).toBe(403);
+  ).toBe(201);
   await expect(requireDocument(env, reader, doc.id, "editor")).rejects.toMatchObject({
     status: 403,
   });
