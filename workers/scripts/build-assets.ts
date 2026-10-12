@@ -1,7 +1,8 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 const out = "workers/dist/app";
+await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 await cp("frontend/dist", out, { recursive: true });
 const index = await readFile(`${out}/index.html`, "utf8");

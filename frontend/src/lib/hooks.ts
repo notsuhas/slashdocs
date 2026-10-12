@@ -8,7 +8,9 @@ export function useMe() {
   return { ...q, unauth };
 }
 
-export function useCapability(name: keyof NonNullable<ServerConfig["capabilities"]>) {
+export function useCapability(
+  name: Exclude<keyof NonNullable<ServerConfig["capabilities"]>, "search">,
+) {
   const config = useQuery({ queryKey: queryKeys.config(), queryFn: api.getConfig });
   return config.isSuccess && config.data.capabilities?.[name] !== false;
 }

@@ -31,7 +31,7 @@
   "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "slashdocs-files" }],
   "vars": {
     "APP_ORIGIN": "http://localhost:8787",
-    "RENDER_ORIGIN": "http://localhost:8788",
+    "RENDER_ORIGIN": "http://127.0.0.1:8788",
     "ALLOWED_EMAILS": "owner@example.com",
     "ALLOWED_DOMAINS": "example.com",
     "DEPLOYMENT": "org",

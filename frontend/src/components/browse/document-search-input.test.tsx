@@ -17,14 +17,16 @@ function jsonResponse(body: unknown) {
   });
 }
 
-function setup(responses: Record<string, unknown> = {}) {
+function setup(responses: Record<string, unknown> = {}, titleOnly = false) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
     jsonResponse(responses[String(input)] || { items: [] }),
   );
   vi.stubGlobal("fetch", fetchMock);
   function Harness() {
     const [value, setValue] = useState("");
-    return <DocumentSearchInput value={value} onChange={setValue} />;
+    return (
+      <DocumentSearchInput value={value} onChange={setValue} titleOnly={titleOnly} />
+    );
   }
   render(
     <QueryClientProvider
@@ -87,4 +89,15 @@ describe("DocumentSearchInput", () => {
     await user.click(await screen.findByRole("option", { name: /Product Specs/ }));
     expect(input).toHaveValue('in:"Product Specs" ');
   });
+});
+
+it("offers only title text search when structured search is unavailable", async () => {
+  const { user, input, fetchMock } = setup({}, true);
+  await user.click(input);
+  expect(input).toHaveAttribute("placeholder", "Search document titles…");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  await user.type(input, "from:ali in:prod");
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
 });

@@ -28,7 +28,7 @@ export type Document = {
   snippet?: string;
 };
 export type ServerConfig = {
-  capabilities?: Partial<
+  capabilities?: { search?: "title" | "full_text" } & Partial<
     Record<
       | "folders"
       | "service_accounts"

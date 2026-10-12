@@ -37,6 +37,7 @@ import { useCapability } from "@/lib/hooks";
 
 export function DocumentsPage() {
   const foldersEnabled = useCapability("folders");
+  const config = useQuery({ queryKey: queryKeys.config(), queryFn: api.getConfig });
   useTitle("Documents");
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -211,7 +212,11 @@ export function DocumentsPage() {
           What did your agents publish?
         </h1>
         <div className="enter mx-auto mt-8 max-w-2xl" style={beat(2)}>
-          <DocumentSearchInput value={q} onChange={setQ} />
+          <DocumentSearchInput
+            titleOnly={config.data?.capabilities?.search === "title"}
+            value={q}
+            onChange={setQ}
+          />
         </div>
       </section>
       <div

@@ -1,4 +1,4 @@
-import { readFile, realpath, writeFile, mkdir } from "node:fs/promises";
+import { readFile, realpath, open, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve, relative, isAbsolute } from "node:path";
 import { z } from "zod";
@@ -73,9 +73,18 @@ export async function loadInstance(
   instance.renderOrigin = render.origin;
   return { instance, path, directory: dirname(path) };
 }
+export async function writePrivateFile(path: string, contents: string) {
+  const file = await open(path, "w", 0o600);
+  try {
+    await file.chmod(0o600);
+    await file.writeFile(contents);
+  } finally {
+    await file.close();
+  }
+}
 export async function saveInstance(path: string, instance: Instance) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, JSON.stringify(instance, null, 2) + "\n", { mode: 0o600 });
+  await writePrivateFile(path, JSON.stringify(instance, null, 2) + "\n");
 }
 export async function cloudflare(
   instance: Instance,

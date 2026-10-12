@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { loadInstance } from "./instance";
+import { loadInstance, writePrivateFile } from "./instance";
 const { instance, directory } = await loadInstance(process.argv[2]);
 if (
   !instance.databaseId ||
@@ -70,15 +69,13 @@ const render = {
   r2_buckets: [{ binding: "DOCUMENTS", bucket_name: instance.bucketName }],
   vars: { APP_ORIGIN: instance.appOrigin, RENDER_PUBLIC_KEY: instance.renderPublicKey },
 };
-await writeFile(
+await writePrivateFile(
   resolve(directory, "wrangler.app.json"),
   JSON.stringify(app, null, 2) + "\n",
-  { mode: 0o600 },
 );
-await writeFile(
+await writePrivateFile(
   resolve(directory, "wrangler.render.json"),
   JSON.stringify(render, null, 2) + "\n",
-  { mode: 0o600 },
 );
 const secrets = {
   SESSION_SECRET: instance.sessionSecret,
@@ -88,9 +85,8 @@ const secrets = {
     ? { GOOGLE_CLIENT_SECRET: instance.googleClientSecret }
     : {}),
 };
-await writeFile(
+await writePrivateFile(
   resolve(directory, "app-secrets.json"),
   JSON.stringify(secrets) + "\n",
-  { mode: 0o600 },
 );
 console.info("Worker configuration and secret files generated outside the repository.");

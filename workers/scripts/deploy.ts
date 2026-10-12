@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { loadInstance } from "./instance";
-const { instance, directory } = await loadInstance(process.argv[2]);
+const { instance, directory, path } = await loadInstance(process.argv[2]);
 if (!instance.googleClientId || !instance.googleClientSecret)
   throw new Error(
     "Set Google OAuth client ID and secret in private instance configuration before deployment.",
@@ -18,14 +18,8 @@ function run(args: string[]) {
 }
 const app = resolve(directory, "wrangler.app.json"),
   render = resolve(directory, "wrangler.render.json");
-run([
-  "workers/scripts/provision.ts",
-  process.argv[2] ?? resolve(directory, "instance.json"),
-]);
-run([
-  "workers/scripts/configure.ts",
-  process.argv[2] ?? resolve(directory, "instance.json"),
-]);
+run(["workers/scripts/provision.ts", path]);
+run(["workers/scripts/configure.ts", path]);
 run(["run", "build:cloudflare"]);
 run([
   "x",
