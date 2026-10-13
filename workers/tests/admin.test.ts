@@ -174,7 +174,9 @@ it("counts a forwarded realtime KV request once and excludes heartbeats and stre
       runtime.env.DB.prepare("SELECT sum(requests) AS n FROM admin_activity").first(),
     )
     .toEqual({ n: 1 });
-  await app.request(
+  // In-process forwarding cannot reach the Durable Object; assert its 500
+  // so an authentication failure cannot masquerade as a counting exclusion.
+  const presence = await app.request(
     "https://app.example.com/v1/documents/doc_kv/presence",
     {
       method: "POST",
@@ -187,11 +189,13 @@ it("counts a forwarded realtime KV request once and excludes heartbeats and stre
     },
     runtime.env,
   );
+  expect(presence.status).toBe(500);
   const stream = await app.request(
-    "https://app.example.com/v1/documents/doc_kv/kv/events?session=bad!",
+    "https://app.example.com/v1/documents/doc_kv/kv/events",
     { headers },
     runtime.env,
   );
+  expect(stream.status).toBe(500);
   await stream.body?.cancel();
   expect(
     await runtime.env.DB.prepare(
