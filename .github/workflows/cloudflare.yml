@@ -68,10 +68,11 @@ jobs:
           bun run --cwd frontend lint
           bun run --cwd frontend format:check
           bun run --cwd frontend test
-      - name: Test retained Go API and CLI contracts
-        run: go test ./api/... ./cli/...
+      # Go API tests embed the built reader and sandbox bridge.
       - name: Build deployable assets and CLI binaries
         run: bun run build:cloudflare
+      - name: Test retained Go API and CLI contracts
+        run: go test ./api/... ./cli/...
       - name: Bundle both Workers without credentials
         run: |
           bun x wrangler deploy --dry-run --config workers/wrangler.app.example.jsonc --outdir /tmp/slashdocs-app
