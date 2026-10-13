@@ -4,6 +4,7 @@ import type { AppEnv } from "../env";
 import { ApiError } from "../../../shared/errors";
 import { hashToken, nowSeconds, sessionToken } from "./tokens";
 import { refreshActorGroups } from "../services/groups";
+import { safeRedirect } from "./policy";
 export type UserRow = { id: string; email: string; name: string; picture_url: string };
 export const principal = (row: UserRow) => ({
   type: "user" as const,
@@ -32,62 +33,85 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
     return;
   }
   await checkOrigin(c, async () => {
-    const authorization = c.req.header("Authorization");
-    if (authorization !== undefined) {
-      const match =
-        /^Bearer ((?:slashdocs_cli_|slashdocs_sa_|aidocs_sa_)[A-Za-z0-9_-]+)$/i.exec(
-          authorization.trimEnd().replace(/^(Bearer) +/i, "$1 "),
-        );
-      if (!match) throw new ApiError(401, "unauthorized", "Invalid credential");
-      const token = match[1];
-      if (token.startsWith("slashdocs_sa_") || token.startsWith("aidocs_sa_")) {
-        const row = await c.env.DB.prepare(
-          "SELECT sa.id,sa.name,k.id AS credential_id FROM service_account_keys k JOIN service_accounts sa ON sa.id=k.service_account_id WHERE k.token_hash=? AND k.revoked_at IS NULL AND sa.disabled_at IS NULL",
-        )
-          .bind(await hashToken(token))
-          .first<{ id: string; name: string; credential_id: string }>();
-        if (!row) throw new ApiError(401, "unauthorized", "Invalid credential");
-        await c.env.DB.prepare(
-          "UPDATE service_account_keys SET last_used_at=? WHERE id=?",
-        )
-          .bind(new Date().toISOString(), row.credential_id)
-          .run();
-        c.set("actor", {
-          principal: { type: "service_account", id: row.id, name: row.name },
-          credentialKind: "service_account",
-          credentialId: row.credential_id,
-        });
+    try {
+      const authorization = c.req.header("Authorization");
+      if (authorization !== undefined) {
+        const match =
+          /^Bearer ((?:slashdocs_cli_|slashdocs_sa_|aidocs_sa_)[A-Za-z0-9_-]+)$/i.exec(
+            authorization.trimEnd().replace(/^(Bearer) +/i, "$1 "),
+          );
+        if (!match) throw new ApiError(401, "unauthorized", "Invalid credential");
+        const token = match[1];
+        if (token.startsWith("slashdocs_sa_") || token.startsWith("aidocs_sa_")) {
+          const row = await c.env.DB.prepare(
+            "SELECT sa.id,sa.name,k.id AS credential_id FROM service_account_keys k JOIN service_accounts sa ON sa.id=k.service_account_id WHERE k.token_hash=? AND k.revoked_at IS NULL AND sa.disabled_at IS NULL",
+          )
+            .bind(await hashToken(token))
+            .first<{ id: string; name: string; credential_id: string }>();
+          if (!row) throw new ApiError(401, "unauthorized", "Invalid credential");
+          await c.env.DB.prepare(
+            "UPDATE service_account_keys SET last_used_at=? WHERE id=?",
+          )
+            .bind(new Date().toISOString(), row.credential_id)
+            .run();
+          c.set("actor", {
+            principal: { type: "service_account", id: row.id, name: row.name },
+            credentialKind: "service_account",
+            credentialId: row.credential_id,
+          });
+        } else {
+          const row = await c.env.DB.prepare(
+            "SELECT u.id,u.email,u.name,u.picture_url,cc.id AS credential_id FROM cli_credentials cc JOIN users u ON u.id=cc.user_id WHERE cc.token_hash=? AND cc.revoked_at IS NULL AND u.provider!='service_account'",
+          )
+            .bind(await hashToken(token))
+            .first<UserRow & { credential_id: string }>();
+          if (!row) throw new ApiError(401, "unauthorized", "Invalid credential");
+          await c.env.DB.prepare("UPDATE cli_credentials SET last_used_at=? WHERE id=?")
+            .bind(new Date().toISOString(), row.credential_id)
+            .run();
+          c.set("actor", {
+            principal: principal(row),
+            credentialKind: "cli",
+            credentialId: row.credential_id,
+          });
+        }
       } else {
+        const token = sessionToken(c);
+        if (!token) throw new ApiError(401, "unauthorized", "Authentication required");
+        const tokenHash = await hashToken(token);
         const row = await c.env.DB.prepare(
-          "SELECT u.id,u.email,u.name,u.picture_url,cc.id AS credential_id FROM cli_credentials cc JOIN users u ON u.id=cc.user_id WHERE cc.token_hash=? AND cc.revoked_at IS NULL AND u.provider!='service_account'",
+          "SELECT u.id,u.email,u.name,u.picture_url FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.provider!='service_account'",
         )
-          .bind(await hashToken(token))
-          .first<UserRow & { credential_id: string }>();
-        if (!row) throw new ApiError(401, "unauthorized", "Invalid credential");
-        await c.env.DB.prepare("UPDATE cli_credentials SET last_used_at=? WHERE id=?")
-          .bind(new Date().toISOString(), row.credential_id)
-          .run();
+          .bind(tokenHash, nowSeconds())
+          .first<UserRow>();
+        if (!row) throw new ApiError(401, "unauthorized", "Invalid session");
         c.set("actor", {
           principal: principal(row),
-          credentialKind: "cli",
-          credentialId: row.credential_id,
+          credentialKind: "session",
+          credentialId: tokenHash,
         });
       }
-    } else {
-      const token = sessionToken(c);
-      if (!token) throw new ApiError(401, "unauthorized", "Authentication required");
-      const tokenHash = await hashToken(token);
-      const row = await c.env.DB.prepare(
-        "SELECT u.id,u.email,u.name,u.picture_url FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.provider!='service_account'",
-      )
-        .bind(tokenHash, nowSeconds())
-        .first<UserRow>();
-      if (!row) throw new ApiError(401, "unauthorized", "Invalid session");
-      c.set("actor", {
-        principal: principal(row),
-        credentialKind: "session",
-        credentialId: tokenHash,
-      });
+    } catch (error) {
+      // Go redirects unauthenticated HTML navigation through login, retaining
+      // the OAuth consent request. API requests and unsafe methods keep 401.
+      const accept = c.req.header("Accept") || "";
+      if (
+        error instanceof ApiError &&
+        error.status === 401 &&
+        c.req.method === "GET" &&
+        accept.includes("text/html") &&
+        !accept.includes("application/json")
+      ) {
+        const url = new URL(c.req.url);
+        const requested = url.pathname + url.search;
+        const params = new URLSearchParams({
+          mode: "web",
+          redirect: safeRedirect(requested) ? requested : "/",
+        });
+        c.res = c.redirect("/v1/auth/google/start?" + params, 302);
+        return;
+      }
+      throw error;
     }
     c.set("actor", await refreshActorGroups(c.env, c.get("actor")));
     await next();

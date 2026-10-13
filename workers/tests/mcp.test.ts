@@ -146,6 +146,56 @@ async function exchange(
   });
 }
 describe("MCP OAuth with real D1", () => {
+  it("starts browser login before MCP consent while API and POST requests stay unauthorized", async () => {
+    const client = await register();
+    const path =
+      "/oauth/authorize?" +
+      new URLSearchParams({
+        client_id: client,
+        redirect_uri: "https://client.example/callback",
+        response_type: "code",
+        code_challenge: await hashToken("v".repeat(43)),
+        code_challenge_method: "S256",
+        resource: origin + "/mcp",
+        state: "resume-consent",
+      });
+    for (const cookie of [undefined, "__Host-slashdocs_session=expired"]) {
+      const response = await request(path, {
+        headers: { Accept: "text/html", ...(cookie ? { Cookie: cookie } : {}) },
+      });
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("Location") || "", origin);
+      expect(location.pathname).toBe("/v1/auth/google/start");
+      expect(location.searchParams.get("mode")).toBe("web");
+      expect(location.searchParams.get("redirect")).toBe(path);
+      const login = await request(location.pathname + location.search);
+      expect(login.status).toBe(302);
+      const provider = new URL(login.headers.get("Location") || "");
+      expect(provider.hostname).toBe("accounts.google.com");
+      const stored = await runtime.env.DB.prepare(
+        "SELECT mode,redirect FROM oauth_states WHERE state_hash=?",
+      )
+        .bind(await hashToken(provider.searchParams.get("state") || ""))
+        .first<{ mode: string; redirect: string }>();
+      expect(stored).toEqual({ mode: "web", redirect: path });
+    }
+    for (const accept of ["application/json", "text/html, application/json", "*/*"]) {
+      const response = await request(path, { headers: { Accept: accept } });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("Location")).toBeNull();
+    }
+    const post = await request("/oauth/authorize", {
+      method: "POST",
+      headers: { Accept: "text/html", Origin: origin },
+    });
+    expect(post.status).toBe(401);
+    expect(post.headers.get("Location")).toBeNull();
+    const authorized = await request(path, {
+      headers: { ...sessionHeaders, Accept: "text/html" },
+    });
+    expect(authorized.status).toBe(200);
+    expect(await authorized.text()).toContain('name="nonce"');
+  });
   it("advertises authcode only, registers, consents, exchanges once, and separates REST credentials", async () => {
     const metadata = await request("/.well-known/oauth-authorization-server");
     expect(await metadata.json()).toMatchObject({
