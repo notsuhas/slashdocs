@@ -103,6 +103,7 @@ jobs:
       - name: Restore private instance configuration
         env:
           SLASHDOCS_INSTANCE_JSON: ${{ secrets.SLASHDOCS_INSTANCE_JSON }}
+          SLASHDOCS_LABELS_ENABLED: ${{ vars.SLASHDOCS_LABELS_ENABLED }}
         shell: python
         run: |
           import json, os, pathlib
@@ -110,6 +111,11 @@ jobs:
           if not raw:
               raise SystemExit('Configure SLASHDOCS_INSTANCE_JSON in the production environment.')
           config = json.loads(raw)
+          labels = os.environ.get('SLASHDOCS_LABELS_ENABLED', '')
+          if labels:
+              if labels not in ('true', 'false'):
+                  raise SystemExit('SLASHDOCS_LABELS_ENABLED must be true or false.')
+              config['labelsEnabled'] = labels == 'true'
           def mask(value):
               if isinstance(value, str) and value:
                   escaped = value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
