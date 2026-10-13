@@ -86,7 +86,8 @@ func TestSessionDetailsRequiresValidSession(t *testing.T) {
 
 func TestSessionCredentialsAreUniquePerLogin(t *testing.T) {
 	codec := auth.SessionCodec{Secret: []byte("test-secret")}
-	first, second := codec.Sign("user"), codec.Sign("user")
+	first, _ := codec.SignSession("user")
+	second, _ := codec.SignSession("user")
 	if first == second {
 		t.Fatal("separate logins reused a session credential")
 	}

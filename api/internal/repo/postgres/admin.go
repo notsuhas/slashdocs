@@ -29,7 +29,7 @@ type activityBuffer struct {
 }
 type sessionCache struct {
 	sync.Mutex
-	seen map[string]string
+	seen map[string]struct{}
 }
 
 // RecordActivity only updates a bounded in-memory buffer. Database work belongs
@@ -102,7 +102,7 @@ func (s *Store) FlushAdminActivity(ctx context.Context) error {
 }
 func (s *Store) ObserveSession(ctx context.Context, session auth.VerifiedSession) error {
 	s.adminSessions.Lock()
-	seen := s.adminSessions.seen[session.TokenHash] == session.SigningKeyID
+	_, seen := s.adminSessions.seen[session.TokenHash]
 	s.adminSessions.Unlock()
 	if seen {
 		return nil
@@ -114,9 +114,9 @@ func (s *Store) ObserveSession(ctx context.Context, session auth.VerifiedSession
 	s.adminSessions.Lock()
 	defer s.adminSessions.Unlock()
 	if s.adminSessions.seen == nil || len(s.adminSessions.seen) >= maxObservedSessions {
-		s.adminSessions.seen = make(map[string]string)
+		s.adminSessions.seen = make(map[string]struct{})
 	}
-	s.adminSessions.seen[session.TokenHash] = session.SigningKeyID
+	s.adminSessions.seen[session.TokenHash] = struct{}{}
 	return nil
 }
 func (s *Store) ForgetSession(ctx context.Context, session auth.VerifiedSession) error {

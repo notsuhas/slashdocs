@@ -1,3 +1,4 @@
+import { routePath } from "hono/route";
 import { optionalExecutionContext } from "../execution-context";
 import type { MiddlewareHandler } from "hono";
 import { internalActor } from "./internal-actor";
@@ -149,19 +150,19 @@ export async function revalidateActor(
   return false;
 }
 
-export function countAdminOperation(path: string, status: number): boolean {
+function countAdminOperation(path: string, status: number): boolean {
   return (
     status !== 429 &&
+    path !== "/v1/*" &&
     !path.startsWith("/v1/admin/") &&
     path !== "/v1/documents/:id/presence" &&
     path !== "/v1/documents/:id/kv/events"
   );
 }
 
-export const observeActivity: MiddlewareHandler<AppEnv> = async (c, next) => {
+const observeActivity: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
-  if (c.get("unknownApiRoute") || !countAdminOperation(c.req.routePath, c.res.status))
-    return;
+  if (!countAdminOperation(routePath(c), c.res.status)) return;
   const user = c.get("actor").principal;
   const now = new Date().toISOString();
   const operation = c.env.DB.prepare(

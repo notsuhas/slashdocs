@@ -164,9 +164,10 @@ it("counts a forwarded realtime KV request once and excludes heartbeats and stre
   )
     .bind(new Date().toISOString())
     .run();
-  const response = await runtime.fetch(
+  const response = await app.request(
     "https://app.example.com/v1/documents/doc_kv/kv",
     { headers },
+    runtime.env,
   );
   expect(response.status).toBe(200);
   expect(
@@ -174,18 +175,23 @@ it("counts a forwarded realtime KV request once and excludes heartbeats and stre
       "SELECT sum(requests) AS n FROM admin_activity",
     ).first(),
   ).toEqual({ n: 1 });
-  await runtime.fetch("https://app.example.com/v1/documents/doc_kv/presence", {
-    method: "POST",
-    headers: {
-      ...headers,
-      Origin: runtime.env.APP_ORIGIN,
-      "Content-Type": "application/json",
+  await app.request(
+    "https://app.example.com/v1/documents/doc_kv/presence",
+    {
+      method: "POST",
+      headers: {
+        ...headers,
+        Origin: runtime.env.APP_ORIGIN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ version_id: "missing" }),
     },
-    body: JSON.stringify({ version_id: "missing" }),
-  });
-  const stream = await runtime.fetch(
-    "https://app.example.com/v1/documents/doc_kv/kv/events",
+    runtime.env,
+  );
+  const stream = await app.request(
+    "https://app.example.com/v1/documents/doc_kv/kv/events?session=bad!",
     { headers },
+    runtime.env,
   );
   await stream.body?.cancel();
   expect(
@@ -339,18 +345,25 @@ it("ignores unmatched routes but counts resource-not-found operations", async ()
   ).toEqual({ n: 1 });
 });
 
-it("counts document IDs that resemble excluded route suffixes", async () => {
-  for (const id of ["presence", "events"]) {
-    expect(
-      (
-        await app.request(
-          `https://app.example.com/v1/documents/${id}`,
-          { headers },
-          runtime.env,
-        )
-      ).status,
-    ).toBe(404);
-  }
+it("counts resource paths that resemble excluded route suffixes", async () => {
+  expect(
+    (
+      await app.request(
+        "https://app.example.com/v1/documents/presence",
+        { headers },
+        runtime.env,
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await app.request(
+        "https://app.example.com/v1/pins/kv/events",
+        { method: "PUT", headers: { ...headers, Origin: runtime.env.APP_ORIGIN } },
+        runtime.env,
+      )
+    ).status,
+  ).toBe(400);
   expect(
     await runtime.env.DB.prepare(
       "SELECT sum(requests) AS n FROM admin_activity",

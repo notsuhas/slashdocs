@@ -43,7 +43,8 @@ type signedPayload struct {
 }
 
 func (s SessionCodec) Sign(userID string) string {
-	return s.SignForAudience(userID, audSession, 30*24*time.Hour)
+	token, _ := s.SignSession(userID)
+	return token
 }
 
 // SignSession returns observation metadata from the payload being signed.
@@ -55,9 +56,6 @@ func (s SessionCodec) SignSession(userID string) (string, VerifiedSession) {
 
 func (s SessionCodec) SignForAudience(userID, audience string, ttl time.Duration) string {
 	p := signedPayload{Subject: userID, Audience: audience, ExpiresAt: time.Now().Add(ttl).Unix()}
-	if audience == audSession {
-		p.Nonce = rand.Text()
-	}
 	return s.signPayload(p)
 }
 

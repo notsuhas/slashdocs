@@ -55,6 +55,6 @@ export interface Actor {
 }
 export type AppEnv = {
   Bindings: Env;
-  Variables: { actor: Actor; unknownApiRoute?: boolean };
+  Variables: { actor: Actor };
 };
 export type Role = "viewer" | "commenter" | "editor" | "owner";

@@ -239,12 +239,25 @@ func TestAdminInFlightObservationCannotRestoreLoggedOutSession(t *testing.T) {
 func TestAdminCountsIDsResemblingExcludedRoutes(t *testing.T) {
 	e := newTestEnv(t)
 	headers := map[string]string{"X-Test-Principal": principalHeader(fixtureOwner)}
-	for _, id := range []string{"presence", "events"} {
-		r := do(t, e.h, http.MethodGet, "/v1/documents/"+id, "", headers)
-		assertStatus(t, r, http.StatusNotFound)
-	}
+	r := do(t, e.h, http.MethodGet, "/v1/documents/presence", "", headers)
+	assertStatus(t, r, http.StatusNotFound)
+	r = do(t, e.h, http.MethodPut, "/v1/pins/kv/events", "", headers)
+	assertStatus(t, r, http.StatusForbidden)
 	stats, err := e.store.AdminStats(context.Background(), "")
 	if err != nil || len(stats.Daily) != 1 || stats.Daily[0].Requests != 2 {
 		t.Fatalf("resource-not-found counts: %+v %v", stats, err)
+	}
+}
+
+func TestAdminExcludesPresenceAndEventStreams(t *testing.T) {
+	e := newTestEnv(t)
+	headers := map[string]string{"X-Test-Principal": principalHeader(fixtureOwner), "Content-Type": "application/json"}
+	r := do(t, e.h, http.MethodPost, "/v1/documents/"+e.doc.ID+"/presence", `{"session":"admin-presence","version":"`+e.ver.ID+`"}`, headers)
+	assertStatus(t, r, http.StatusNoContent)
+	r = do(t, e.h, http.MethodGet, "/v1/documents/"+e.doc.ID+"/kv/events?session=bad!", "", headers)
+	assertStatus(t, r, http.StatusBadRequest)
+	stats, err := e.store.AdminStats(context.Background(), "")
+	if err != nil || len(stats.Daily) != 0 {
+		t.Fatalf("excluded operations counted: %+v %v", stats, err)
 	}
 }

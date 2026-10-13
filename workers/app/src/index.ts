@@ -120,8 +120,7 @@ apiDocs.get("/api-docs", (c) => c.redirect("/api-docs/index.html", 302));
 apiDocs.get("/api-docs/*", (c) => c.env.ASSETS.fetch(c.req.raw));
 apiDocs.get("/openapi.json", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.route("/", apiDocs);
-app.all("/v1/*", (c) => {
-  c.set("unknownApiRoute", true);
+app.all("/v1/*", () => {
   throw new ApiError(404, "not_found", "Unknown API route");
 });
 app.route(
