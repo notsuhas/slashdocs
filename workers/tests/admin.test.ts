@@ -164,17 +164,16 @@ it("counts a forwarded realtime KV request once and excludes heartbeats and stre
   )
     .bind(new Date().toISOString())
     .run();
-  const response = await app.request(
+  const response = await runtime.fetch(
     "https://app.example.com/v1/documents/doc_kv/kv",
     { headers },
-    runtime.env,
   );
   expect(response.status).toBe(200);
-  expect(
-    await runtime.env.DB.prepare(
-      "SELECT sum(requests) AS n FROM admin_activity",
-    ).first(),
-  ).toEqual({ n: 1 });
+  await expect
+    .poll(() =>
+      runtime.env.DB.prepare("SELECT sum(requests) AS n FROM admin_activity").first(),
+    )
+    .toEqual({ n: 1 });
   await app.request(
     "https://app.example.com/v1/documents/doc_kv/presence",
     {
