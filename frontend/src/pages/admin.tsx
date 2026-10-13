@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { AdminUsersPanel } from "./admin-users";
+import { adminAccessError } from "@/lib/admin-access";
+import { useCallback, useEffect, useState } from "react";
 import { queryKeys } from "@/lib/queryKeys";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useIsFetching } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { APIError, api } from "@/api";
+import { api, type APIError } from "@/api";
 import { useMe } from "@/lib/hooks";
 import { useTitle } from "@/lib/use-title";
 import { Page, PageHeader } from "@/components/layout/page";
@@ -11,28 +13,36 @@ import { Button } from "@/components/ui/button";
 
 const number = (value: number) => value.toLocaleString();
 export function AdminPage() {
-  useTitle("Admin statistics");
+  useTitle("Platform admin");
   const me = useMe();
   const qc = useQueryClient();
+  const [view, setView] = useState<"users" | "overview">("users");
+  const [accessError, setAccessError] = useState<APIError | null>(null);
+  const onUnauthorized = useCallback((error: APIError) => setAccessError(error), []);
+  const refreshing = useIsFetching({ queryKey: queryKeys.adminAll() }) > 0;
   const stats = useQuery({
     queryKey: queryKeys.adminStats(),
     queryFn: api.adminStats,
-    enabled: me.data?.is_admin === true,
+    enabled: me.data?.is_admin === true && accessError === null,
     retry: false,
     refetchInterval: 60000,
   });
-  const unauthorized =
-    stats.error instanceof APIError &&
-    (stats.error.status === 401 || stats.error.status === 403);
+  const authError = adminAccessError(stats.error) ?? accessError;
+  const unauthorized = !!authError;
+  const accessLost =
+    unauthorized || me.unauth || (me.data !== undefined && me.data.is_admin !== true);
   useEffect(() => {
-    if (!unauthorized) return;
-    qc.setQueryData<Awaited<ReturnType<typeof api.me>>>(queryKeys.me(), (current) =>
-      current ? { ...current, is_admin: false } : current,
-    );
-    qc.removeQueries({ queryKey: queryKeys.adminStats(), exact: true });
-    void qc.invalidateQueries({ queryKey: queryKeys.me() });
-  }, [unauthorized, qc]);
-  if (me.unauth)
+    if (!accessLost) return;
+    if (unauthorized)
+      qc.setQueryData<Awaited<ReturnType<typeof api.me>>>(queryKeys.me(), (current) =>
+        current ? { ...current, is_admin: false } : current,
+      );
+    void qc
+      .cancelQueries({ queryKey: queryKeys.adminAll() })
+      .then(() => qc.removeQueries({ queryKey: queryKeys.adminAll() }));
+    if (unauthorized) void qc.invalidateQueries({ queryKey: queryKeys.me() });
+  }, [accessLost, unauthorized, qc]);
+  if (me.unauth || authError?.status === 401)
     return (
       <Page>
         <PageHeader title="Session expired" description="Sign in again to continue." />
@@ -54,25 +64,46 @@ export function AdminPage() {
   return (
     <Page>
       <PageHeader
-        title="Platform statistics"
-        description="Usage and adoption across the entire platform. Refreshes every minute."
+        title="Platform admin"
+        description="See who is using the platform and what they have uploaded."
         actions={
           <Button
             variant="outline"
-            disabled={stats.isFetching}
-            onClick={() => void stats.refetch()}
+            disabled={refreshing}
+            onClick={() =>
+              void qc.invalidateQueries({ queryKey: queryKeys.adminAll() })
+            }
           >
             Refresh
           </Button>
         }
       />
-      {stats.isError && (
+      <div className="mb-6 flex gap-3">
+        <Button
+          variant={view === "users" ? "primary" : "outline"}
+          aria-pressed={view === "users"}
+          onClick={() => setView("users")}
+        >
+          Users and documents
+        </Button>
+        <Button
+          variant={view === "overview" ? "primary" : "outline"}
+          aria-pressed={view === "overview"}
+          onClick={() => setView("overview")}
+        >
+          Overview
+        </Button>
+      </div>
+      <div hidden={view !== "users"}>
+        <AdminUsersPanel active={view === "users"} onUnauthorized={onUnauthorized} />
+      </div>
+      {view === "overview" && stats.isError && (
         <p role="alert" className="mb-6">
           Could not load statistics. Try refreshing.
         </p>
       )}
-      {stats.isLoading && <p>Loading statistics…</p>}
-      {data && (
+      {view === "overview" && stats.isLoading && <p>Loading statistics…</p>}
+      {view === "overview" && data && (
         <div className="space-y-6">
           <p className="text-sm text-[var(--color-fg-muted)]">
             Updated {new Date(stats.dataUpdatedAt).toLocaleTimeString()}. Activity

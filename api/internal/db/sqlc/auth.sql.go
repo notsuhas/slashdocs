@@ -260,12 +260,12 @@ const upsertGoogleUser = `-- name: UpsertGoogleUser :exec
 
 WITH updated AS (
   UPDATE users
-  SET email=$2, name=$3, google_sub=$4, picture_url=$5
+  SET email=$2, name=$3, google_sub=$4, picture_url=$5, last_login_at=now()
   WHERE google_sub=$4 OR (email=$2 AND google_sub IS NULL)
   RETURNING id
 )
-INSERT INTO users(id,email,name,google_sub,picture_url)
-SELECT $1,$2,$3,$4,$5
+INSERT INTO users(id,email,name,google_sub,picture_url,last_login_at)
+SELECT $1,$2,$3,$4,$5,now()
 WHERE NOT EXISTS (SELECT 1 FROM updated)
 `
 

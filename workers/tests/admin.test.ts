@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { pruneAdminObservations } from "../app/src/services/admin";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import worker, { app } from "../app/src/index";
@@ -390,4 +391,143 @@ it("counts resource paths that resemble excluded route suffixes", async () => {
       "SELECT sum(requests) AS n FROM admin_activity",
     ).first(),
   ).toEqual({ n: 2 });
+});
+
+it("lists real user identities, sessions and uploads independently of ownership", async () => {
+  const now = new Date().toISOString();
+  await seedUser(runtime.env, "other", "other@example.com");
+  await runtime.env.DB.batch([
+    runtime.env.DB.prepare(
+      "INSERT INTO documents(id,title,owner_user_id,current_version_id,updated_at) VALUES('shared','Shared roadmap','other','v2',?)",
+    ).bind(now),
+    runtime.env.DB.prepare(
+      "INSERT INTO documents(id,title,owner_user_id,current_version_id,updated_at) VALUES('own','Own notes','usr_test','v3',?)",
+    ).bind(now),
+    runtime.env.DB.prepare(
+      "INSERT INTO documents(id,title,owner_user_id,deleted_at,updated_at) VALUES('deleted','Deleted','usr_test',?,?)",
+    ).bind(now, now),
+    runtime.env.DB.prepare(
+      "INSERT INTO versions(id,document_id,number,object_key,sha256,byte_length,created_by_user_id,created_at) VALUES('v1','shared',1,'v1','h',5,'other',?),('v2','shared',2,'v2','h',7,'usr_test',?),('v3','own',1,'v3','h',9,'usr_test',?),('v4','deleted',1,'v4','h',100,'usr_test',?)",
+    ).bind(now, now, now, now),
+    runtime.env.DB.prepare("UPDATE users SET last_login_at=? WHERE id='usr_test'").bind(
+      now,
+    ),
+  ]);
+  await app.request("https://app.example.com/v1/me", { headers }, runtime.env);
+  const response = await app.request(
+    "https://app.example.com/v1/admin/users?status=logged_in&q=READER",
+    { headers },
+    runtime.env,
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(await response.json()).toMatchObject({
+    items: [
+      {
+        id: "usr_test",
+        email: "reader@example.com",
+        sessions: 1,
+        documents_uploaded: 2,
+        versions_uploaded: 2,
+        owned_documents: 1,
+        last_login_at: now,
+        requests_30d: 1,
+      },
+    ],
+    has_more: false,
+  });
+  const uploads = await app.request(
+    "https://app.example.com/v1/admin/users/usr_test/documents",
+    { headers },
+    runtime.env,
+  );
+  const data = z.object({ items: z.array(z.unknown()) }).parse(await uploads.json());
+  expect(data.items).toHaveLength(2);
+  expect(data.items).toContainEqual(
+    expect.objectContaining({
+      id: "shared",
+      title: "Shared roadmap",
+      owner_id: "other",
+      owner_type: "user",
+      owner_email: "other@example.com",
+      versions_uploaded: 1,
+      total_versions: 2,
+      storage_bytes: 7,
+      first_upload_at: now,
+    }),
+  );
+  const own = await app.request(
+    "https://app.example.com/v1/admin/users/usr_test/documents?kind=owned&q=notes",
+    { headers },
+    runtime.env,
+  );
+  expect(await own.json()).toMatchObject({
+    items: [{ id: "own", title: "Own notes" }],
+  });
+  expect(
+    (
+      await app.request(
+        "https://app.example.com/v1/documents/shared",
+        { headers },
+        runtime.env,
+      )
+    ).status,
+  ).toBe(403);
+  for (const path of [
+    "/v1/admin/users?page=0",
+    "/v1/admin/users?status=bad",
+    "/v1/admin/users/usr_test/documents?kind=bad",
+  ])
+    expect(
+      (await app.request("https://app.example.com" + path, { headers }, runtime.env))
+        .status,
+    ).toBe(400);
+  expect(
+    (
+      await app.request(
+        "https://app.example.com/v1/admin/users/missing/documents",
+        { headers },
+        runtime.env,
+      )
+    ).status,
+  ).toBe(404);
+  runtime.env.ADMIN_USERS = "";
+  for (const path of ["/v1/admin/users", "/v1/admin/users/usr_test/documents"])
+    expect(
+      (await app.request("https://app.example.com" + path, { headers }, runtime.env))
+        .status,
+    ).toBe(403);
+});
+it("paginates signed-up humans and excludes placeholders and bots", async () => {
+  const now = new Date().toISOString();
+  for (let i = 0; i < 30; i++)
+    await seedUser(runtime.env, `page-${i}`, `page-${i}@example.com`);
+  await runtime.env.DB.prepare(
+    "INSERT INTO users(id,provider,provider_subject,email,name,created_at) VALUES('invited','placeholder','invited','page-invited@example.com','Invitation',?),('bot-user','service_account','bot-user','page-bot@example.com','Bot',?)",
+  )
+    .bind(now, now)
+    .run();
+  const first = await app.request(
+    "https://app.example.com/v1/admin/users?q=page-&page=1",
+    { headers },
+    runtime.env,
+  );
+  const second = await app.request(
+    "https://app.example.com/v1/admin/users?q=page-&page=2",
+    { headers },
+    runtime.env,
+  );
+  const schema = z.object({
+    items: z.array(z.object({ id: z.string() })),
+    has_more: z.boolean(),
+  });
+  const a = schema.parse(await first.json()),
+    b = schema.parse(await second.json());
+  expect(a.items).toHaveLength(25);
+  expect(a.has_more).toBe(true);
+  expect(b.items).toHaveLength(5);
+  expect(b.has_more).toBe(false);
+  expect(
+    new Set([...a.items, ...b.items].map((user: { id: string }) => user.id)).size,
+  ).toBe(30);
 });

@@ -164,3 +164,85 @@ func (s *Store) AdminStats(ctx context.Context, keyID string) (repo.AdminStats, 
 	}
 	return out, rows.Err()
 }
+
+func (s *Store) AdminUsers(ctx context.Context, keyID, search, status string, page int) (repo.AdminUserPage, error) {
+	out := repo.AdminUserPage{Items: []repo.AdminUser{}}
+	if err := s.FlushAdminActivity(ctx); err != nil {
+		return out, err
+	}
+	rows, err := s.db.Query(ctx, `WITH selected AS (
+ SELECT u.* FROM users u WHERE google_sub IS NOT NULL
+ AND ($2='' OR strpos(lower(u.email),lower($2))>0 OR strpos(lower(u.name),lower($2))>0)
+ AND ($3<>'logged_in' OR EXISTS(SELECT 1 FROM admin_sessions s WHERE s.user_id=u.id AND s.expires_at>now() AND s.revoked_at IS NULL AND s.signing_key_id=$1))
+ AND ($3<>'active' OR EXISTS(SELECT 1 FROM admin_activity a WHERE a.principal_id=u.id AND a.is_user AND a.day>=(now() AT TIME ZONE 'UTC')::date-1 AND a.last_seen>now()-interval '24 hours'))
+ ORDER BY u.created_at DESC,u.id DESC LIMIT 26 OFFSET $4)
+ SELECT u.id,u.email,u.name,u.picture_url,u.created_at,u.last_login_at,
+ (SELECT max(last_seen) FROM admin_activity a WHERE a.principal_id=u.id AND a.is_user AND a.day>=(now() AT TIME ZONE 'UTC')::date-30),
+ (SELECT count(*) FROM admin_sessions s WHERE s.user_id=u.id AND s.expires_at>now() AND s.revoked_at IS NULL AND s.signing_key_id=$1),
+ (SELECT count(DISTINCT document_id) FROM versions v WHERE v.created_by_type='user' AND v.created_by_id=u.id),
+ (SELECT count(*) FROM versions v WHERE v.created_by_type='user' AND v.created_by_id=u.id),
+ (SELECT count(*) FROM documents d WHERE d.owner_type='user' AND d.owner_id=u.id),
+ (SELECT coalesce(sum(requests),0) FROM admin_activity a WHERE a.principal_id=u.id AND a.is_user AND a.day>=(now() AT TIME ZONE 'UTC')::date-29)
+ FROM selected u ORDER BY u.created_at DESC,u.id DESC`, keyID, search, status, (page-1)*25)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var u repo.AdminUser
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.PictureURL, &u.CreatedAt, &u.LastLoginAt, &u.LastActiveAt, &u.Sessions, &u.DocumentsUploaded, &u.VersionsUploaded, &u.OwnedDocuments, &u.Requests30d); err != nil {
+			return out, err
+		}
+		out.Items = append(out.Items, u)
+	}
+	if len(out.Items) > 25 {
+		out.HasMore = true
+		out.Items = out.Items[:25]
+	}
+	return out, rows.Err()
+}
+func (s *Store) AdminUserDocuments(ctx context.Context, id, kind, search string, page int) (repo.AdminDocumentPage, error) {
+	out := repo.AdminDocumentPage{Items: []repo.AdminDocument{}}
+	var exists bool
+	if err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND google_sub IS NOT NULL)`, id).Scan(&exists); err != nil {
+		return out, err
+	}
+	if !exists {
+		return out, repo.ErrNotFound
+	}
+	filter := "d.id IN (SELECT document_id FROM versions WHERE created_by_type='user' AND created_by_id=$1)"
+	if kind == "owned" {
+		filter = "d.owner_type='user' AND d.owner_id=$1"
+	}
+	rows, err := s.db.Query(ctx, `WITH selected AS MATERIALIZED (
+ SELECT d.* FROM documents d WHERE `+filter+`
+ AND ($2='' OR strpos(lower(d.title),lower($2))>0 OR d.id=$2)
+ ORDER BY d.updated_at DESC,d.id DESC LIMIT 26 OFFSET $3)
+ SELECT d.id,d.title,d.owner_id,d.owner_type,coalesce(o.name,sa.name,''),coalesce(o.email,''),d.created_at,d.updated_at,
+ min(v.created_at) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),
+ max(v.created_at) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),
+ count(*) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),count(*),
+ coalesce(sum(v.byte_length) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),0),
+ count(*) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1 AND v.byte_length IS NULL)
+ FROM selected d LEFT JOIN users o ON d.owner_type='user' AND o.id=d.owner_id
+ LEFT JOIN service_accounts sa ON d.owner_type='service_account' AND sa.id=d.owner_id
+ JOIN versions v ON v.document_id=d.id
+ GROUP BY d.id,d.title,d.owner_id,d.owner_type,d.created_at,d.updated_at,o.id,sa.id
+ ORDER BY d.updated_at DESC,d.id DESC`, id, search, (page-1)*25)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d repo.AdminDocument
+		if err := rows.Scan(&d.ID, &d.Title, &d.OwnerID, &d.OwnerType, &d.OwnerName, &d.OwnerEmail, &d.CreatedAt, &d.UpdatedAt, &d.FirstUploadAt, &d.LastUploadAt, &d.VersionsUploaded, &d.TotalVersions, &d.StorageBytes, &d.UnknownSizeVersions); err != nil {
+			return out, err
+		}
+		out.Items = append(out.Items, d)
+	}
+	if len(out.Items) > 25 {
+		out.HasMore = true
+		out.Items = out.Items[:25]
+	}
+	return out, rows.Err()
+}
