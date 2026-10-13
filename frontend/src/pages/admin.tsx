@@ -94,7 +94,9 @@ export function AdminPage() {
           Overview
         </Button>
       </div>
-      {view === "users" && <AdminUsersPanel onUnauthorized={onUnauthorized} />}
+      <div hidden={view !== "users"}>
+        <AdminUsersPanel active={view === "users"} onUnauthorized={onUnauthorized} />
+      </div>
       {view === "overview" && stats.isError && (
         <p role="alert" className="mb-6">
           Could not load statistics. Try refreshing.

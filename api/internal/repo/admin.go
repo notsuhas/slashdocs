@@ -30,8 +30,8 @@ type AdminStats struct {
 }
 type AdminStatistics interface {
 	AdminStats(context.Context, string) (AdminStats, error)
-	AdminUsers(context.Context, string, string, string, int) (AdminUserPage, error)
-	AdminUserDocuments(context.Context, string, string, string, int) (AdminDocumentPage, error)
+	AdminUsers(ctx context.Context, signingKeyID, search, status string, page int) (AdminUserPage, error)
+	AdminUserDocuments(ctx context.Context, userID, kind, search string, page int) (AdminDocumentPage, error)
 }
 type AdminObservations interface {
 	RecordActivity(context.Context, string, bool) error
@@ -63,6 +63,7 @@ type AdminDocument struct {
 	ID                  string     `json:"id"`
 	Title               string     `json:"title"`
 	OwnerID             string     `json:"owner_id"`
+	OwnerType           string     `json:"owner_type"`
 	OwnerName           string     `json:"owner_name"`
 	OwnerEmail          string     `json:"owner_email"`
 	CreatedAt           time.Time  `json:"created_at"`

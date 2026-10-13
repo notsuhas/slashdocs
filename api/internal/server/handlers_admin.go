@@ -25,12 +25,15 @@ func (h handlers) isAdmin(p *auth.Principal) bool {
 	}
 	return false
 }
-func (h handlers) adminStats(c *gin.Context) {
+func (h handlers) requireAdmin(c *gin.Context) {
 	c.Header("Cache-Control", "private, no-store")
 	if !h.isAdmin(current(c)) {
 		forbidden(c, "admin access required")
+		c.Abort()
 		return
 	}
+}
+func (h handlers) adminStats(c *gin.Context) {
 	out, err := h.deps.repository.AdminStats(c.Request.Context(), (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).SigningKeyID())
 	if err != nil {
 		internalErr(c, err)
@@ -67,11 +70,6 @@ func (h handlers) forgetAdminSession(c *gin.Context) {
 }
 
 func (h handlers) adminPage(c *gin.Context) (int, bool) {
-	c.Header("Cache-Control", "private, no-store")
-	if !h.isAdmin(current(c)) {
-		forbidden(c, "admin access required")
-		return 0, false
-	}
 	page := 1
 	if raw := c.Query("page"); raw != "" {
 		var err error

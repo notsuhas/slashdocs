@@ -345,6 +345,48 @@ func TestAdminUserDetailsAndUploads(t *testing.T) {
 		t.Fatalf("logout: %+v %v", after, err)
 	}
 }
+func TestAdminUploadsIntoServiceAccountOwnedDocument(t *testing.T) {
+	e := newConfiguredTestEnv(t, server.Config{Environment: "test", AdminUsers: []string{fixtureOwner.Email}})
+	ctx := context.Background()
+	bot := auth.Principal{Type: auth.PrincipalServiceAccount, ID: e.sa.ID}
+	doc, ver, err := e.store.CreateDocument(ctx, bot, "Bot report", []byte("initial"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store.CreateGrant(ctx, "document", doc.ID, fixtureEditor, repo.RoleEditor, bot); err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.store.CreateVersion(ctx, doc.ID, ver.ID, "Human update", []byte("human"), fixtureEditor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headers := map[string]string{"X-Test-Principal": principalHeader(fixtureOwner)}
+	r := do(t, e.h, http.MethodGet, "/v1/admin/users/"+fixtureEditor.ID+"/documents", "", headers)
+	assertStatus(t, r, http.StatusOK)
+	var docs repo.AdminDocumentPage
+	if err := json.Unmarshal(r.Body.Bytes(), &docs); err != nil {
+		t.Fatal(err)
+	}
+	if len(docs.Items) != 1 {
+		t.Fatalf("missing bot-owned upload: %s", r.Body.String())
+	}
+	d := docs.Items[0]
+	if d.ID != doc.ID || d.OwnerID != e.sa.ID || d.OwnerType != "service_account" || d.OwnerName != e.sa.Name || d.OwnerEmail != "" || d.VersionsUploaded != 1 || d.TotalVersions != 2 || d.StorageBytes != 5 {
+		t.Fatalf("attribution: %+v", d)
+	}
+	users, err := e.store.AdminUsers(ctx, "", fixtureEditor.Email, "all", 1)
+	if err != nil || len(users.Items) != 1 || users.Items[0].DocumentsUploaded != 1 || users.Items[0].VersionsUploaded != 1 || users.Items[0].OwnedDocuments != 0 {
+		t.Fatalf("summary: %+v %v", users, err)
+	}
+	r = do(t, e.h, http.MethodGet, "/v1/admin/users/"+fixtureEditor.ID+"/documents?kind=owned", "", headers)
+	assertStatus(t, r, http.StatusOK)
+	if err := json.Unmarshal(r.Body.Bytes(), &docs); err != nil {
+		t.Fatal(err)
+	}
+	if len(docs.Items) != 0 {
+		t.Fatalf("human does not own bot document: %s", r.Body.String())
+	}
+}
 func TestAdminUsersPaginationAndLastSignIn(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()

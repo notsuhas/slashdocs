@@ -16,6 +16,7 @@ export type AdminDocument = {
   id: string;
   title: string;
   owner_id: string;
+  owner_type: "user" | "service_account";
   owner_name: string;
   owner_email: string;
   created_at: string;

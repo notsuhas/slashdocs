@@ -181,7 +181,7 @@ func (s *Store) AdminUsers(ctx context.Context, keyID, search, status string, pa
  (SELECT count(*) FROM admin_sessions s WHERE s.user_id=u.id AND s.expires_at>now() AND s.revoked_at IS NULL AND s.signing_key_id=$1),
  (SELECT count(DISTINCT document_id) FROM versions v WHERE v.created_by_type='user' AND v.created_by_id=u.id),
  (SELECT count(*) FROM versions v WHERE v.created_by_type='user' AND v.created_by_id=u.id),
- (SELECT count(*) FROM documents d WHERE d.owner_id=u.id),
+ (SELECT count(*) FROM documents d WHERE d.owner_type='user' AND d.owner_id=u.id),
  (SELECT coalesce(sum(requests),0) FROM admin_activity a WHERE a.principal_id=u.id AND a.is_user AND a.day>=(now() AT TIME ZONE 'UTC')::date-29)
  FROM selected u ORDER BY u.created_at DESC,u.id DESC`, keyID, search, status, (page-1)*25)
 	if err != nil {
@@ -210,23 +210,32 @@ func (s *Store) AdminUserDocuments(ctx context.Context, id, kind, search string,
 	if !exists {
 		return out, repo.ErrNotFound
 	}
-	rows, err := s.db.Query(ctx, `SELECT d.id,d.title,o.id,o.name,o.email,min(v.created_at),d.updated_at,
+	filter := "d.id IN (SELECT document_id FROM versions WHERE created_by_type='user' AND created_by_id=$1)"
+	if kind == "owned" {
+		filter = "d.owner_type='user' AND d.owner_id=$1"
+	}
+	rows, err := s.db.Query(ctx, `WITH selected AS MATERIALIZED (
+ SELECT d.* FROM documents d WHERE `+filter+`
+ AND ($2='' OR strpos(lower(d.title),lower($2))>0 OR d.id=$2)
+ ORDER BY d.updated_at DESC,d.id DESC LIMIT 26 OFFSET $3)
+ SELECT d.id,d.title,d.owner_id,d.owner_type,coalesce(o.name,sa.name,''),coalesce(o.email,''),d.created_at,d.updated_at,
  min(v.created_at) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),
  max(v.created_at) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),
  count(*) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),count(*),
  coalesce(sum(v.byte_length) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1),0),
  count(*) FILTER(WHERE v.created_by_type='user' AND v.created_by_id=$1 AND v.byte_length IS NULL)
- FROM documents d JOIN users o ON o.id=d.owner_id JOIN versions v ON v.document_id=d.id
- WHERE ($2<>'owned' OR d.owner_id=$1) AND ($2<>'uploaded' OR EXISTS(SELECT 1 FROM versions own WHERE own.document_id=d.id AND own.created_by_type='user' AND own.created_by_id=$1))
- AND ($3='' OR strpos(lower(d.title),lower($3))>0 OR d.id=$3)
- GROUP BY d.id,o.id ORDER BY d.updated_at DESC,d.id DESC LIMIT 26 OFFSET $4`, id, kind, search, (page-1)*25)
+ FROM selected d LEFT JOIN users o ON d.owner_type='user' AND o.id=d.owner_id
+ LEFT JOIN service_accounts sa ON d.owner_type='service_account' AND sa.id=d.owner_id
+ JOIN versions v ON v.document_id=d.id
+ GROUP BY d.id,d.title,d.owner_id,d.owner_type,d.created_at,d.updated_at,o.id,sa.id
+ ORDER BY d.updated_at DESC,d.id DESC`, id, search, (page-1)*25)
 	if err != nil {
 		return out, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var d repo.AdminDocument
-		if err := rows.Scan(&d.ID, &d.Title, &d.OwnerID, &d.OwnerName, &d.OwnerEmail, &d.CreatedAt, &d.UpdatedAt, &d.FirstUploadAt, &d.LastUploadAt, &d.VersionsUploaded, &d.TotalVersions, &d.StorageBytes, &d.UnknownSizeVersions); err != nil {
+		if err := rows.Scan(&d.ID, &d.Title, &d.OwnerID, &d.OwnerType, &d.OwnerName, &d.OwnerEmail, &d.CreatedAt, &d.UpdatedAt, &d.FirstUploadAt, &d.LastUploadAt, &d.VersionsUploaded, &d.TotalVersions, &d.StorageBytes, &d.UnknownSizeVersions); err != nil {
 			return out, err
 		}
 		out.Items = append(out.Items, d)

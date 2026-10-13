@@ -23,6 +23,7 @@ const document = {
   id: "doc_shared",
   title: "Shared roadmap",
   owner_id: "carla",
+  owner_type: "user",
   owner_name: "Carla",
   owner_email: "carla@example.com",
   created_at: "2026-10-01T12:00:00Z",
@@ -72,10 +73,12 @@ it("opens on identities and drills into the person's actual documents", async ()
   expect(screen.getByText("Logged in")).toBeInTheDocument();
   expect(screen.queryByText("Signed-up users")).not.toBeInTheDocument();
   fireEvent.click(
-    screen.getByRole("button", { name: "View documents for suhas@example.com" }),
+    screen.getByRole("button", {
+      name: "Suhas — View documents for suhas@example.com",
+    }),
   );
   const link = await screen.findByRole("link", { name: "Shared roadmap" });
-  expect(link).toHaveAttribute("href", "/app/documents/doc_shared");
+  expect(link).toHaveAttribute("href", "/app/d/doc_shared");
   expect(screen.getByText("carla@example.com")).toBeInTheDocument();
   expect(api.adminUserDocuments).toHaveBeenCalledWith("suhas", "uploaded", "", 1);
   fireEvent.click(screen.getByRole("button", { name: "Owned by this user" }));
@@ -107,7 +110,9 @@ it.each([401, 403])(
     const client = setup();
     await screen.findByText("suhas@example.com");
     fireEvent.click(
-      screen.getByRole("button", { name: "View documents for suhas@example.com" }),
+      screen.getByRole("button", {
+        name: "Suhas — View documents for suhas@example.com",
+      }),
     );
     await screen.findByRole("link", { name: "Shared roadmap" });
     vi.mocked(api.adminUserDocuments).mockRejectedValue(
@@ -143,4 +148,44 @@ it("keeps identities on an ordinary outage and reports the failed refresh", asyn
     await screen.findByText("Could not load users. Refresh to try again."),
   ).toBeInTheDocument();
   expect(screen.getByText("suhas@example.com")).toBeInTheDocument();
+});
+
+it("preserves a selected user's search across overview and resets it for a different user", async () => {
+  const other = { ...person, id: "carla", name: "Carla", email: "carla@example.com" };
+  vi.mocked(api.adminUsers).mockResolvedValue({
+    items: [person, other],
+    has_more: false,
+  });
+  setup();
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Suhas — View documents for suhas@example.com",
+    }),
+  );
+  await screen.findByRole("link", { name: "Shared roadmap" });
+  fireEvent.change(screen.getByLabelText("Search this user's documents"), {
+    target: { value: "roadmap" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Search documents" }));
+  await waitFor(() =>
+    expect(api.adminUserDocuments).toHaveBeenCalledWith(
+      "suhas",
+      "uploaded",
+      "roadmap",
+      1,
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+  fireEvent.click(screen.getByRole("button", { name: "Users and documents" }));
+  expect(screen.getByLabelText("Search this user's documents")).toHaveValue("roadmap");
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Carla — View documents for carla@example.com",
+    }),
+  );
+  await waitFor(() =>
+    expect(api.adminUserDocuments).toHaveBeenCalledWith("carla", "uploaded", "", 1),
+  );
+  expect(screen.getByLabelText("Search this user's documents")).toHaveValue("");
+  expect(screen.getByLabelText("Documents for Carla")).toHaveFocus();
 });

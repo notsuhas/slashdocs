@@ -111,20 +111,26 @@ adminRoutes.get("/v1/admin/users/:id/documents", async (c) => {
     .bind(id)
     .first();
   if (!user) throw new ApiError(404, "not_found", "User not found");
+  const filter =
+    kind === "owned"
+      ? "d.owner_user_id=?"
+      : "d.id IN (SELECT document_id FROM versions WHERE created_by_user_id=?)";
   const result = await c.env.DB.prepare(
-    `SELECT d.id,d.title,o.id AS owner_id,o.name AS owner_name,o.email AS owner_email,
+    `WITH selected AS MATERIALIZED (
+ SELECT d.* FROM documents d WHERE d.deleted_at IS NULL AND ${filter}
+ AND (?='' OR instr(lower(d.title),lower(?))>0 OR d.id=?)
+ ORDER BY d.updated_at DESC,d.id DESC LIMIT 26 OFFSET ?)
+ SELECT d.id,d.title,o.id AS owner_id,CASE WHEN o.provider='service_account' THEN 'service_account' ELSE 'user' END AS owner_type,o.name AS owner_name,o.email AS owner_email,
  min(v.created_at) AS created_at,d.updated_at,
  min(CASE WHEN v.created_by_user_id=? THEN v.created_at END) AS first_upload_at,
  max(CASE WHEN v.created_by_user_id=? THEN v.created_at END) AS last_upload_at,
  sum(v.created_by_user_id=?) AS versions_uploaded,count(*) AS total_versions,
  coalesce(sum(CASE WHEN v.created_by_user_id=? THEN v.byte_length END),0) AS storage_bytes,0 AS unknown_size_versions
- FROM documents d JOIN users o ON o.id=d.owner_user_id JOIN versions v ON v.document_id=d.id
- WHERE d.deleted_at IS NULL AND (?<>'owned' OR d.owner_user_id=?)
- AND (?<>'uploaded' OR EXISTS(SELECT 1 FROM versions own WHERE own.document_id=d.id AND own.created_by_user_id=?))
- AND (?='' OR instr(lower(d.title),lower(?))>0 OR d.id=?)
- GROUP BY d.id,o.id ORDER BY d.updated_at DESC,d.id DESC LIMIT 26 OFFSET ?`,
+ FROM selected d JOIN users o ON o.id=d.owner_user_id CROSS JOIN versions v
+ WHERE v.document_id=d.id
+ GROUP BY d.id,o.id ORDER BY d.updated_at DESC,d.id DESC`,
   )
-    .bind(id, id, id, id, kind, id, kind, id, q, q, q, (page - 1) * 25)
+    .bind(id, q, q, q, (page - 1) * 25, id, id, id, id)
     .all();
   return c.json({
     items: result.results.slice(0, 25),

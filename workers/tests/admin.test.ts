@@ -448,6 +448,7 @@ it("lists real user identities, sessions and uploads independently of ownership"
       id: "shared",
       title: "Shared roadmap",
       owner_id: "other",
+      owner_type: "user",
       owner_email: "other@example.com",
       versions_uploaded: 1,
       total_versions: 2,
