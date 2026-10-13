@@ -342,6 +342,8 @@ type DocumentKVEvent struct {
 // against a disposable database (see api/internal/testdb) rather than an
 // in-memory fake, so test behaviour cannot drift from production.
 type Repository interface {
+	AdminStatistics
+	AdminObservations
 	NotificationPreferences(ctx context.Context, principal auth.Principal, documentID string) (NotificationPreferences, error)
 	SetNotificationPreferences(ctx context.Context, principal auth.Principal, documentID string, enabled bool) (NotificationPreferences, error)
 	RequestDocumentAccess(ctx context.Context, principal auth.Principal, documentID string) error

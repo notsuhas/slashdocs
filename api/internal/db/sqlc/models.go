@@ -8,6 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminActivity struct {
+	Day         pgtype.Date
+	PrincipalID string
+	IsUser      bool
+	Requests    int64
+	LastSeen    pgtype.Timestamptz
+}
+
+type AdminMetadatum struct {
+	ID                int32
+	TrackingStartedAt pgtype.Timestamptz
+}
+
+type AdminSession struct {
+	TokenHash    string
+	UserID       string
+	ExpiresAt    pgtype.Timestamptz
+	SigningKeyID string
+}
+
 type CliCredential struct {
 	ID         string
 	UserID     string
@@ -320,4 +340,5 @@ type Version struct {
 	CreatedAt       pgtype.Timestamptz
 	SearchText      pgtype.Text
 	SearchVector    interface{}
+	ByteLength      pgtype.Int8
 }

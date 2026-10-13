@@ -1,6 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { queryKeys } from "@/lib/queryKeys";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "@/api";
+import { APIError, api } from "@/api";
 import { useMe } from "@/lib/hooks";
 import { useTitle } from "@/lib/use-title";
 import { Page, PageHeader } from "@/components/layout/page";
@@ -11,15 +13,34 @@ const number = (value: number) => value.toLocaleString();
 export function AdminPage() {
   useTitle("Admin statistics");
   const me = useMe();
+  const qc = useQueryClient();
   const stats = useQuery({
-    queryKey: ["admin-stats"],
+    queryKey: queryKeys.adminStats(),
     queryFn: api.adminStats,
     enabled: me.data?.is_admin === true,
     retry: false,
     refetchInterval: 60000,
   });
+  const unauthorized =
+    stats.error instanceof APIError &&
+    (stats.error.status === 401 || stats.error.status === 403);
+  useEffect(() => {
+    if (!unauthorized) return;
+    qc.setQueryData<Awaited<ReturnType<typeof api.me>>>(queryKeys.me(), (current) =>
+      current ? { ...current, is_admin: false } : current,
+    );
+    qc.removeQueries({ queryKey: queryKeys.adminStats(), exact: true });
+    void qc.invalidateQueries({ queryKey: queryKeys.me() });
+  }, [unauthorized, qc]);
+  if (me.unauth)
+    return (
+      <Page>
+        <PageHeader title="Session expired" description="Sign in again to continue." />
+        <Link to="/login">Sign in</Link>
+      </Page>
+    );
   if (me.isLoading) return <Page>Loading…</Page>;
-  if (!me.data?.is_admin)
+  if (unauthorized || !me.data?.is_admin)
     return (
       <Page>
         <PageHeader
@@ -71,17 +92,17 @@ export function AdminPage() {
               [
                 "Active in 24 hours",
                 number(data.active_24h),
-                "Distinct humans making authenticated API requests.",
+                "Distinct humans using API operations, including automatic document refreshes.",
               ],
               [
                 "Active in 7 days",
                 number(data.active_7d),
-                "Distinct humans making authenticated API requests.",
+                "Distinct humans using API operations, including automatic document refreshes.",
               ],
               [
                 "Active in 30 days",
                 number(data.active_30d),
-                "Distinct humans making authenticated API requests.",
+                "Distinct humans using API operations, including automatic document refreshes.",
               ],
               [
                 "Logged-in users",
@@ -91,7 +112,7 @@ export function AdminPage() {
               [
                 "Browser sessions",
                 number(data.sessions),
-                "Unexpired observed sessions; a person can have several.",
+                "Unexpired sessions; a person can have several. Older Go sessions appear when next used; rotating its signing key excludes previous sessions.",
               ],
               ["Documents", number(data.documents), "Currently retained documents."],
               [
@@ -111,9 +132,9 @@ export function AdminPage() {
                 "Service accounts that have not been disabled.",
               ],
               [
-                "Requests in 30 days",
+                "API operations in 30 days",
                 number(data.daily.reduce((sum, day) => sum + day.requests, 0)),
-                "Authenticated API requests in the last 30 UTC calendar days, including bots. Dashboard requests are excluded.",
+                "REST requests and API operations dispatched by MCP tools in the last 30 UTC calendar days. Excludes dashboard, presence, event streams, and rate-limit rejections.",
               ],
             ].map(([title, value, description]) => (
               <Card key={title} className="p-5">
@@ -129,7 +150,7 @@ export function AdminPage() {
               <thead>
                 <tr>
                   <th className="pb-3">Date (UTC)</th>
-                  <th className="pb-3">API requests</th>
+                  <th className="pb-3">API operations</th>
                   <th className="pb-3">Active users</th>
                 </tr>
               </thead>

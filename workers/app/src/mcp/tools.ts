@@ -1,10 +1,12 @@
 import inventory from "./tools.json";
 import pages from "./guidelines.json";
-import type { Actor, Env } from "../env";
+import type { Context } from "hono";
+import type { Actor, Env, AppEnv } from "../env";
 export type MCPDispatch = (
   env: Env,
   actor: Actor,
   request: Request,
+  execution?: Context<AppEnv>["executionCtx"],
 ) => Promise<Response>;
 export const tools = inventory;
 export type ToolResult = {

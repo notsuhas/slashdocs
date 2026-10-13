@@ -67,14 +67,15 @@ func TestSessionCodecRejectsWrongAudience(t *testing.T) {
 	}
 }
 
-func TestSessionExpiryRequiresValidSession(t *testing.T) {
+func TestSessionDetailsRequiresValidSession(t *testing.T) {
 	codec := auth.SessionCodec{Secret: []byte("test-secret")}
-	expiry, ok := codec.SessionExpiry(codec.Sign("user"))
+	session, ok := codec.VerifySessionDetails(codec.Sign("user"))
+	expiry := session.ExpiresAt
 	if !ok || expiry <= time.Now().Unix() {
 		t.Fatalf("expiry=%d ok=%v", expiry, ok)
 	}
 	for _, token := range []string{"", "v1.broken.token", codec.SignForAudience("user", "render", time.Hour), codec.SignForAudience("user", "session", -time.Hour), (auth.SessionCodec{Secret: []byte("other")}).Sign("user")} {
-		if _, ok := codec.SessionExpiry(token); ok {
+		if _, ok := codec.VerifySessionDetails(token); ok {
 			t.Fatal("accepted invalid session")
 		}
 	}

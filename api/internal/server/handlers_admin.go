@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -8,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/razorpay/slashdocs/api/internal/auth"
-	"github.com/razorpay/slashdocs/api/internal/repo"
 )
 
 func (h handlers) isAdmin(p *auth.Principal) bool {
@@ -28,12 +29,7 @@ func (h handlers) adminStats(c *gin.Context) {
 		forbidden(c, "admin access required")
 		return
 	}
-	store, ok := h.deps.repository.(repo.AdminObserver)
-	if !ok {
-		c.JSON(http.StatusServiceUnavailable, errorResponse("unavailable", "admin statistics unavailable", nil))
-		return
-	}
-	out, err := store.AdminStats(c.Request.Context())
+	out, err := h.deps.repository.AdminStats(c.Request.Context(), (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).SigningKeyID())
 	if err != nil {
 		internalErr(c, err)
 		return
@@ -41,44 +37,32 @@ func (h handlers) adminStats(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 func logObservation(c *gin.Context, err error) {
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		slog.ErrorContext(c.Request.Context(), "admin observation failed", "error", err)
 	}
 }
+func countAdminOperation(path string, status int) bool {
+	return status != http.StatusTooManyRequests && !strings.HasPrefix(path, "/v1/admin/") && !strings.HasSuffix(path, "/presence") && !strings.HasSuffix(path, "/kv/events")
+}
 func (h handlers) observeActivity(c *gin.Context) {
-	if !strings.HasPrefix(c.Request.URL.Path, "/v1/admin/") {
-		if store, ok := h.deps.repository.(repo.AdminObserver); ok {
-			p := current(c)
-			logObservation(c, store.RecordActivity(c.Request.Context(), p.ID, p.Type == auth.PrincipalUser))
-			if auth.BearerFromHeader(c.GetHeader("Authorization")) == "" {
-				if ck, err := c.Request.Cookie(sessionCookieName); err == nil {
-					h.observeAdminSession(c, ck.Value)
-				}
-			}
-		}
-	}
 	c.Next()
+	if !countAdminOperation(c.Request.URL.Path, c.Writer.Status()) {
+		return
+	}
+	p := current(c)
+	logObservation(c, h.deps.repository.RecordActivity(c.Request.Context(), p.ID, p.Type == auth.PrincipalUser))
+	if p.Session != nil {
+		logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), *p.Session))
+	}
 }
 func (h handlers) observeAdminSession(c *gin.Context, token string) {
-	store, ok := h.deps.repository.(repo.AdminObserver)
-	if !ok {
-		return
+	session, ok := (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).VerifySessionDetails(token)
+	if ok {
+		logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), session))
 	}
-	codec := auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}
-	uid, ok := codec.VerifySession(token)
-	if !ok {
-		return
-	}
-	expiry, ok := codec.SessionExpiry(token)
-	if !ok {
-		return
-	}
-	logObservation(c, store.ObserveSession(c.Request.Context(), auth.HashToken(token), uid, expiry))
 }
 func (h handlers) forgetAdminSession(c *gin.Context) {
-	if store, ok := h.deps.repository.(repo.AdminObserver); ok {
-		if ck, err := c.Request.Cookie(sessionCookieName); err == nil {
-			logObservation(c, store.ForgetSession(c.Request.Context(), auth.HashToken(ck.Value)))
-		}
+	if ck, err := c.Request.Cookie(sessionCookieName); err == nil {
+		logObservation(c, h.deps.repository.ForgetSession(c.Request.Context(), auth.HashToken(ck.Value)))
 	}
 }

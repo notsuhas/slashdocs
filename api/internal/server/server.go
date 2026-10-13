@@ -55,6 +55,7 @@ type Config struct {
 
 // Server wraps the gin engine.
 type Server struct {
+	adminRepository    repo.Repository
 	engine             *gin.Engine
 	notificationWorker *notifications.Worker
 }
@@ -204,7 +205,7 @@ func New(cfg Config, opts ...Option) *Server {
 	if len(cfg.PreviousOrigins) > 0 && cfg.AppOrigin != "" {
 		r.Use(movedOriginMiddleware(cfg.AppOrigin, cfg.PreviousOrigins))
 	}
-	s := &Server{engine: r}
+	s := &Server{engine: r, adminRepository: deps.repository}
 	if deps.commentNotificationSender != nil {
 		store, ok := deps.repository.(notifications.Store)
 		if !ok {

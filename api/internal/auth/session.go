@@ -13,6 +13,22 @@ const audSession = "session"
 
 type SessionCodec struct{ Secret []byte }
 
+type VerifiedSession struct {
+	UserID       string
+	TokenHash    string
+	ExpiresAt    int64
+	SigningKeyID string
+}
+
+func (s SessionCodec) SigningKeyID() string { return HashToken(string(s.Secret)) }
+func (s SessionCodec) VerifySessionDetails(v string) (VerifiedSession, bool) {
+	p, ok := s.verifyPayload(v, audSession)
+	if !ok {
+		return VerifiedSession{}, false
+	}
+	return VerifiedSession{UserID: p.Subject, TokenHash: HashToken(v), ExpiresAt: p.ExpiresAt, SigningKeyID: s.SigningKeyID()}, true
+}
+
 type signedPayload struct {
 	Subject   string `json:"sub"`
 	Audience  string `json:"aud"`
@@ -32,47 +48,35 @@ func (s SessionCodec) SignForAudience(userID, audience string, ttl time.Duration
 	sig := mac.Sum(nil)
 	return "v1." + payloadB64 + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
-func (s SessionCodec) SessionExpiry(v string) (int64, bool) {
-	if _, ok := s.VerifySession(v); !ok {
-		return 0, false
-	}
-	parts := strings.Split(v, ".")
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return 0, false
-	}
-	var p signedPayload
-	if err := json.Unmarshal(payload, &p); err != nil {
-		return 0, false
-	}
-	return p.ExpiresAt, true
-}
-
 func (s SessionCodec) VerifySession(v string) (string, bool) {
 	return s.VerifyAudience(v, audSession)
 }
 
 func (s SessionCodec) VerifyAudience(v, audience string) (string, bool) {
+	p, ok := s.verifyPayload(v, audience)
+	return p.Subject, ok
+}
+func (s SessionCodec) verifyPayload(v, audience string) (signedPayload, bool) {
 	parts := strings.Split(v, ".")
 	if len(parts) != 3 || parts[0] != "v1" {
-		return "", false
+		return signedPayload{}, false
 	}
 	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
-		return "", false
+		return signedPayload{}, false
 	}
 	mac := hmac.New(sha256.New, s.Secret)
 	mac.Write([]byte(parts[1]))
 	if !hmac.Equal(sig, mac.Sum(nil)) {
-		return "", false
+		return signedPayload{}, false
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", false
+		return signedPayload{}, false
 	}
 	var p signedPayload
-	if err := json.Unmarshal(payload, &p); err != nil || p.Subject == "" || p.Audience != audience || p.ExpiresAt < time.Now().Unix() {
-		return "", false
+	if err := json.Unmarshal(payload, &p); err != nil || p.Subject == "" || p.Audience != audience || p.ExpiresAt <= time.Now().Unix() {
+		return signedPayload{}, false
 	}
-	return p.Subject, true
+	return p, true
 }

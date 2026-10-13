@@ -11,9 +11,9 @@ adminRoutes.get("/v1/admin/stats", async (c) => {
   const stats = await c.env.DB.prepare(
     `SELECT
     (SELECT count(*) FROM users WHERE provider NOT IN ('service_account','placeholder')) AS users,
-    (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user=1 AND last_seen>?) AS active_24h,
-    (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user=1 AND last_seen>?) AS active_7d,
-    (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user=1 AND last_seen>?) AS active_30d,
+    (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user=1 AND day>=? AND last_seen>?) AS active_24h,
+    (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user=1 AND day>=? AND last_seen>?) AS active_7d,
+    (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user=1 AND day>=? AND last_seen>?) AS active_30d,
     (SELECT count(DISTINCT s.user_id) FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.expires_at>? AND u.provider NOT IN ('service_account','placeholder')) AS logged_in_users,
     (SELECT count(*) FROM sessions WHERE expires_at>?) AS sessions,
     (SELECT count(*) FROM documents WHERE deleted_at IS NULL) AS documents,
@@ -22,9 +22,18 @@ adminRoutes.get("/v1/admin/stats", async (c) => {
     0 AS unknown_size_versions,
     (SELECT count(*) FROM comments c JOIN documents d ON d.id=c.document_id WHERE c.deleted_at IS NULL AND d.deleted_at IS NULL) AS comments,
     (SELECT count(*) FROM service_accounts WHERE disabled_at IS NULL) AS service_accounts,
-    (SELECT min(day) FROM admin_activity) AS tracking_since`,
+    (SELECT tracking_started_at FROM admin_metadata WHERE id=1) AS tracking_since`,
   )
-    .bind(since(1), since(7), since(30), Math.floor(now / 1000), Math.floor(now / 1000))
+    .bind(
+      since(1).slice(0, 10),
+      since(1),
+      since(7).slice(0, 10),
+      since(7),
+      since(30).slice(0, 10),
+      since(30),
+      Math.floor(now / 1000),
+      Math.floor(now / 1000),
+    )
     .first();
   if (!stats) throw new ApiError(500, "internal", "Statistics unavailable");
   const daily = await c.env.DB.prepare(

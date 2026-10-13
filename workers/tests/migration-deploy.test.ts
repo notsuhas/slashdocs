@@ -33,7 +33,20 @@ describe("deployment migrations", () => {
     const mf = new Miniflare({ modules: true, script: "", d1Databases: ["DB"] });
     try {
       const db = await mf.getD1Database("DB");
-      expect(names).toContain("0011_admin_observability.sql");
+      expect(names).toEqual([
+        "0001_core.sql",
+        "0002_folders.sql",
+        "0003_state.sql",
+        "0004_identity.sql",
+        "0005_metadata.sql",
+        "0006_notifications.sql",
+        "0007_mcp.sql",
+        "0008_groups_grants.sql",
+        "0009_github.sql",
+        "0010_grant_identities.sql",
+        "0011_admin_observability.sql",
+        "0012_admin_lifecycle.sql",
+      ]);
       for (const name of names) {
         const sql = await readFile(resolve(migrations, name), "utf8");
         const statements = unstable_splitSqlQuery(sql);

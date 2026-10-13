@@ -1,4 +1,4 @@
-import { isAdmin } from "../services/admin";
+import { isAdmin, observeActivity } from "../services/admin";
 import { z } from "zod";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -235,7 +235,7 @@ authRoutes.post("/v1/auth/logout", checkOrigin, async (c) => {
   writeCookie(c, cookieName(c), "", 0);
   return c.body(null, 204);
 });
-authRoutes.get("/v1/me", requireAuth, async (c) => {
+authRoutes.get("/v1/me", requireAuth, observeActivity, async (c) => {
   const user = c.get("actor").principal;
   if (user.type === "service_account") {
     const account = await c.env.DB.prepare(
@@ -276,7 +276,7 @@ authRoutes.get("/v1/me", requireAuth, async (c) => {
     },
   });
 });
-authRoutes.get("/v1/users", requireAuth, async (c) => {
+authRoutes.get("/v1/users", requireAuth, observeActivity, async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   if (q.length < 2) return c.json({ items: [] });
   const escaped = q.replace(/[\\%_]/g, "\\$&");
@@ -287,7 +287,7 @@ authRoutes.get("/v1/users", requireAuth, async (c) => {
     .all<UserRow>();
   return c.json({ items: rows.results.map(principal) });
 });
-authRoutes.get("/v1/auth/cli/credentials", requireAuth, async (c) => {
+authRoutes.get("/v1/auth/cli/credentials", requireAuth, observeActivity, async (c) => {
   const rows = await c.env.DB.prepare(
     "SELECT id,name,created_at,last_used_at,revoked_at FROM cli_credentials WHERE user_id=? ORDER BY created_at DESC",
   )
@@ -295,11 +295,16 @@ authRoutes.get("/v1/auth/cli/credentials", requireAuth, async (c) => {
     .all();
   return c.json({ items: rows.results });
 });
-authRoutes.delete("/v1/auth/cli/credentials/:id", requireAuth, async (c) => {
-  await c.env.DB.prepare(
-    "UPDATE cli_credentials SET revoked_at=? WHERE id=? AND user_id=?",
-  )
-    .bind(new Date().toISOString(), c.req.param("id"), c.get("actor").principal.id)
-    .run();
-  return c.body(null, 204);
-});
+authRoutes.delete(
+  "/v1/auth/cli/credentials/:id",
+  requireAuth,
+  observeActivity,
+  async (c) => {
+    await c.env.DB.prepare(
+      "UPDATE cli_credentials SET revoked_at=? WHERE id=? AND user_id=?",
+    )
+      .bind(new Date().toISOString(), c.req.param("id"), c.get("actor").principal.id)
+      .run();
+    return c.body(null, 204);
+  },
+);

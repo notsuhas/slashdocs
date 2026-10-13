@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import type { AppEnv } from "./env";
 import { ApiError } from "../../shared/errors";
 import { authRoutes, requireAuth } from "./routes/auth";
+import { observeActivity, pruneAdminObservations } from "./services/admin";
 import { adminRoutes } from "./routes/admin";
 import { configRoutes } from "./routes/config";
 import { documentRoutes } from "./routes/documents";
@@ -87,6 +88,7 @@ app.route("/", configRoutes);
 app.route("/", authRoutes);
 const secured = new Hono<AppEnv>();
 secured.use("/v1/*", requireAuth);
+secured.use("/v1/*", observeActivity);
 const activityLimit = activityRateLimit();
 for (const path of [
   "/v1/me/notifications",
@@ -123,8 +125,8 @@ app.all("/v1/*", () => {
 });
 app.route(
   "/",
-  createMCPRoutes((env, actor, request) =>
-    withInternalActor(request, actor, async () => app.fetch(request, env)),
+  createMCPRoutes((env, actor, request, execution) =>
+    withInternalActor(request, actor, async () => app.fetch(request, env, execution)),
   ),
 );
 app.get("/install.sh", (c) =>
@@ -138,6 +140,7 @@ app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: AppEnv["Bindings"]) {
+    await pruneAdminObservations(env);
     if (!env.DOCUMENT_SEARCH)
       throw new Error("Document search binding is not configured");
     const response = await env.DOCUMENT_SEARCH.get(

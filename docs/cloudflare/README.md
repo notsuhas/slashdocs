@@ -95,7 +95,16 @@ The dashboard reports signed-up human accounts, active humans over 24 hours/7 da
 unexpired browser sessions, retained documents/versions, stored HTML bytes, comments,
 enabled bots, and daily authenticated API request totals over 30 UTC days. Logged-in
 means a valid session, not current online presence. Activity starts with this deployment;
-pre-tracking dates display a dash. API usage includes bots and failed authorized operations,
-excludes dashboard requests, and does not represent Cloudflare billing or anonymous render traffic.
+pre-tracking dates display a dash. Usage counts REST requests and internal API dispatches made by MCP tools, including
+bots, automatic document refreshes, and failed authorized operations. It excludes
+dashboard requests, presence heartbeats, event streams, and 429 rejections, and does
+not represent Cloudflare billing or anonymous render traffic. Counter writes use
+`waitUntil`; failures are logged without failing the user operation. Daily activity
+records are retained for 31 UTC calendar days and pruned on the first API operation
+each UTC day. Enable `cleanupCron` for hourly cleanup, including during periods with
+no API traffic. Expired sessions are removed by both cleanup paths. Tracking
+initialization persists independently of traffic and retention.
+Use an OIDC provider that verifies email ownership before granting email-based admin
+access; if it omits `email_verified`, it must enforce that guarantee itself.
 Deleted documents and their versions/comments are excluded; HTML bytes exclude orphan R2 objects,
 database storage, and infrastructure overhead. Counters contain aggregate counts, not document contents.

@@ -115,9 +115,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	workerCtx, cancelWorkers := context.WithCancel(context.WithoutCancel(ctx))
 	var workers sync.WaitGroup
 	workers.Go(func() { srv.RunCommentNotifications(workerCtx) })
+	workers.Go(func() { srv.RunAdminObservations(workerCtx) })
 	workers.Go(func() { indexVersions(workerCtx, store) })
 	defer func() { cancelWorkers(); workers.Wait() }()
 	return serve(ctx, srv.Handler(), ":"+envOrDefault("SLASHDOCS_PORT", "8080"), ":"+envOrDefault("SLASHDOCS_METRICS_PORT", "9090"))

@@ -223,6 +223,9 @@ func (a mcpAPIAdapter) call(
 	c.Params = params
 	c.Set(principalContextKey, &principal)
 	handler(c)
+	if countAdminOperation(req.URL.Path, recorder.Code) {
+		logObservation(c, a.handlers.deps.repository.RecordActivity(ctx, principal.ID, principal.Type == auth.PrincipalUser))
+	}
 	return mcpAPIResponse{
 		status:      recorder.Code,
 		contentType: recorder.Header().Get("Content-Type"),

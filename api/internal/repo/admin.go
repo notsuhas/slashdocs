@@ -1,6 +1,10 @@
 package repo
 
-import "context"
+import (
+	"context"
+
+	"github.com/razorpay/slashdocs/api/internal/auth"
+)
 
 type AdminDay struct {
 	Day         string `json:"day"`
@@ -23,9 +27,13 @@ type AdminStats struct {
 	TrackingSince       *string    `json:"tracking_since"`
 	Daily               []AdminDay `json:"daily"`
 }
-type AdminObserver interface {
-	AdminStats(context.Context) (AdminStats, error)
+type AdminStatistics interface {
+	AdminStats(context.Context, string) (AdminStats, error)
+}
+type AdminObservations interface {
 	RecordActivity(context.Context, string, bool) error
-	ObserveSession(context.Context, string, string, int64) error
+	ObserveSession(context.Context, auth.VerifiedSession) error
 	ForgetSession(context.Context, string) error
+	FlushAdminActivity(context.Context) error
+	PruneAdminObservations(context.Context) error
 }

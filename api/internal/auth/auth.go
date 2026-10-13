@@ -22,11 +22,12 @@ const (
 )
 
 type Principal struct {
-	Type       PrincipalType `json:"type"`
-	ID         string        `json:"id"`
-	Email      string        `json:"email,omitempty"`
-	Name       string        `json:"name,omitempty"`
-	PictureURL string        `json:"picture_url,omitempty"`
+	Type       PrincipalType    `json:"type"`
+	ID         string           `json:"id"`
+	Email      string           `json:"email,omitempty"`
+	Name       string           `json:"name,omitempty"`
+	PictureURL string           `json:"picture_url,omitempty"`
+	Session    *VerifiedSession `json:"-"`
 
 	// GoogleGroupIDs and GoogleGroupMembershipState are authorization inputs,
 	// not principal profile data. Excluding them from JSON prevents a

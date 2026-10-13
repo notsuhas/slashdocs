@@ -1,6 +1,7 @@
 import { useMe, useCapability } from "@/lib/hooks";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  BarChart3,
   Bot,
   Check,
   LogOut,
@@ -107,7 +108,7 @@ export function AccountMenu({ user }: { user: Principal }) {
         </DropdownItem>
         {me.data?.is_admin && (
           <DropdownItem onSelect={() => nav("/app/admin")}>
-            <Monitor className="h-4 w-4" /> Admin statistics
+            <BarChart3 className="h-4 w-4" /> Admin statistics
           </DropdownItem>
         )}
         {botsEnabled && (
