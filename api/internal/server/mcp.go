@@ -223,7 +223,8 @@ func (a mcpAPIAdapter) call(
 	c.Params = params
 	c.Set(principalContextKey, &principal)
 	handler(c)
-	if countAdminOperation(req.URL.Path, recorder.Code) {
+	// MCP dispatches only operation handlers, never dashboard, presence or streams.
+	if recorder.Code != http.StatusTooManyRequests {
 		logObservation(c, a.handlers.deps.repository.RecordActivity(ctx, principal.ID, principal.Type == auth.PrincipalUser))
 	}
 	return mcpAPIResponse{

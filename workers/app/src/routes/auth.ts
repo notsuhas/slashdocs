@@ -1,4 +1,4 @@
-import { isAdmin, requireObservedAuth } from "../services/admin";
+import { isAdmin } from "../services/admin";
 import { z } from "zod";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -20,7 +20,12 @@ import {
   sessionToken,
   writeCookie,
 } from "../auth/tokens";
-import { checkOrigin, principal, type UserRow } from "../auth/middleware";
+import {
+  checkOrigin,
+  principal,
+  requireObservedAuth,
+  type UserRow,
+} from "../auth/middleware";
 export { requireAuth } from "../auth/middleware";
 type StateRow = {
   mode: string;

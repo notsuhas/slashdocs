@@ -235,3 +235,16 @@ func TestAdminInFlightObservationCannotRestoreLoggedOutSession(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminCountsIDsResemblingExcludedRoutes(t *testing.T) {
+	e := newTestEnv(t)
+	headers := map[string]string{"X-Test-Principal": principalHeader(fixtureOwner)}
+	for _, id := range []string{"presence", "events"} {
+		r := do(t, e.h, http.MethodGet, "/v1/documents/"+id, "", headers)
+		assertStatus(t, r, http.StatusNotFound)
+	}
+	stats, err := e.store.AdminStats(context.Background(), "")
+	if err != nil || len(stats.Daily) != 1 || stats.Daily[0].Requests != 2 {
+		t.Fatalf("resource-not-found counts: %+v %v", stats, err)
+	}
+}

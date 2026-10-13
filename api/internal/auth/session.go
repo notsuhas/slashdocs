@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
@@ -21,7 +22,11 @@ type VerifiedSession struct {
 	SigningKeyID string
 }
 
-func (s SessionCodec) SigningKeyID() string { return HashToken(string(s.Secret)) }
+func (s SessionCodec) SigningKeyID() string {
+	mac := hmac.New(sha256.New, s.Secret)
+	mac.Write([]byte("slashdocs/admin-session-key-id/v1"))
+	return hex.EncodeToString(mac.Sum(nil))
+}
 func (s SessionCodec) VerifySessionDetails(v string) (VerifiedSession, bool) {
 	p, ok := s.verifyPayload(v, audSession)
 	if !ok {
@@ -41,11 +46,22 @@ func (s SessionCodec) Sign(userID string) string {
 	return s.SignForAudience(userID, audSession, 30*24*time.Hour)
 }
 
+// SignSession returns observation metadata from the payload being signed.
+func (s SessionCodec) SignSession(userID string) (string, VerifiedSession) {
+	p := signedPayload{Subject: userID, Audience: audSession, ExpiresAt: time.Now().Add(30 * 24 * time.Hour).Unix(), Nonce: rand.Text()}
+	token := s.signPayload(p)
+	return token, VerifiedSession{UserID: p.Subject, TokenHash: HashToken(token), ExpiresAt: p.ExpiresAt, SigningKeyID: s.SigningKeyID()}
+}
+
 func (s SessionCodec) SignForAudience(userID, audience string, ttl time.Duration) string {
 	p := signedPayload{Subject: userID, Audience: audience, ExpiresAt: time.Now().Add(ttl).Unix()}
 	if audience == audSession {
 		p.Nonce = rand.Text()
 	}
+	return s.signPayload(p)
+}
+
+func (s SessionCodec) signPayload(p signedPayload) string {
 	payload, _ := json.Marshal(p)
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, s.Secret)

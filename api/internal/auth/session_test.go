@@ -1,6 +1,9 @@
 package auth_test
 
 import (
+	"encoding/hex"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,5 +94,33 @@ func TestSessionCredentialsAreUniquePerLogin(t *testing.T) {
 		if _, ok := codec.VerifySessionDetails(token); !ok {
 			t.Fatal("new session did not verify")
 		}
+	}
+}
+
+func TestSessionKeyIDCannotForgeTokens(t *testing.T) {
+	for _, length := range []int{32, 64, 65, 88, 128} {
+		t.Run(fmt.Sprint(length), func(t *testing.T) {
+			codec := auth.SessionCodec{Secret: []byte(strings.Repeat("s", length))}
+			key, err := hex.DecodeString(codec.SigningKeyID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			attacker := auth.SessionCodec{Secret: key}
+			for _, audience := range []string{"session", "render", "mcp"} {
+				forged := attacker.SignForAudience("victim-admin", audience, time.Hour)
+				if _, ok := codec.VerifyAudience(forged, audience); ok {
+					t.Fatalf("stored key ID forged %s token", audience)
+				}
+			}
+		})
+	}
+}
+
+func TestSignedSessionMetadataMatchesVerification(t *testing.T) {
+	codec := auth.SessionCodec{Secret: []byte("test-secret")}
+	token, signed := codec.SignSession("user")
+	verified, ok := codec.VerifySessionDetails(token)
+	if !ok || signed != verified {
+		t.Fatalf("signed = %+v, verified = %+v, ok = %v", signed, verified, ok)
 	}
 }

@@ -1,4 +1,5 @@
-import { Hono, type Context } from "hono";
+import { optionalExecutionContext } from "../execution-context";
+import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { authenticateMCP } from "./auth";
 import { oauthRoutes } from "./oauth";
@@ -162,12 +163,7 @@ export function createMCPRoutes(dispatch: MCPDispatch): Hono<AppEnv> {
         const args = "arguments" in params ? params.arguments : {};
         if (!args || typeof args !== "object" || Array.isArray(args))
           return failure(-32602, "Invalid arguments");
-        let execution: Context<AppEnv>["executionCtx"] | undefined;
-        try {
-          execution = c.executionCtx;
-        } catch {
-          /* In-process caller. */
-        }
+        const execution = optionalExecutionContext(c);
         try {
           return success(
             await callTool(

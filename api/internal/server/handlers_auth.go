@@ -415,8 +415,8 @@ func (h handlers) logout(c *gin.Context) {
 }
 
 func (h handlers) setSessionCookie(c *gin.Context, p auth.Principal) {
-	token := (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).Sign(p.ID)
-	h.observeAdminSession(c, token)
+	token, session := (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).SignSession(p.ID)
+	logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), session))
 	h.writeSessionCookie(c, token, sessionTTLSeconds)
 }
 

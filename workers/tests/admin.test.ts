@@ -1,8 +1,4 @@
-import { Hono } from "hono";
-import type { AppEnv } from "../app/src/env";
-import { requireAuth } from "../app/src/auth/middleware";
-import { activityRateLimit } from "../app/src/auth/activity-limit";
-import { observeActivity, pruneAdminObservations } from "../app/src/services/admin";
+import { pruneAdminObservations } from "../app/src/services/admin";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import worker, { app } from "../app/src/index";
 import { hashToken, nowSeconds } from "../app/src/auth/tokens";
@@ -268,12 +264,9 @@ it("records MCP API operations exactly once without counting discovery messages"
   ).toEqual({ n: 1 });
 });
 it("does not count rate-limited API attempts", async () => {
-  const isolated = new Hono<AppEnv>();
-  isolated.use("*", requireAuth, observeActivity, activityRateLimit());
-  isolated.get("/v1/test", (c) => c.json({ ok: true }));
   for (let i = 0; i < 61; i++) {
-    const response = await isolated.request(
-      "https://app.example.com/v1/test",
+    const response = await app.request(
+      "https://app.example.com/v1/me/notifications",
       { headers },
       runtime.env,
     );
@@ -344,4 +337,23 @@ it("ignores unmatched routes but counts resource-not-found operations", async ()
       "SELECT sum(requests) AS n FROM admin_activity",
     ).first(),
   ).toEqual({ n: 1 });
+});
+
+it("counts document IDs that resemble excluded route suffixes", async () => {
+  for (const id of ["presence", "events"]) {
+    expect(
+      (
+        await app.request(
+          `https://app.example.com/v1/documents/${id}`,
+          { headers },
+          runtime.env,
+        )
+      ).status,
+    ).toBe(404);
+  }
+  expect(
+    await runtime.env.DB.prepare(
+      "SELECT sum(requests) AS n FROM admin_activity",
+    ).first(),
+  ).toEqual({ n: 2 });
 });

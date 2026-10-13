@@ -42,23 +42,17 @@ func logObservation(c *gin.Context, err error) {
 	}
 }
 func countAdminOperation(path string, status int) bool {
-	return status != http.StatusTooManyRequests && !strings.HasPrefix(path, "/v1/admin/") && !strings.HasSuffix(path, "/presence") && !strings.HasSuffix(path, "/kv/events")
+	return status != http.StatusTooManyRequests && !strings.HasPrefix(path, "/v1/admin/") && path != "/v1/documents/:id/presence" && path != "/v1/documents/:id/kv/events"
 }
 func (h handlers) observeActivity(c *gin.Context) {
 	c.Next()
-	if !countAdminOperation(c.Request.URL.Path, c.Writer.Status()) {
+	if !countAdminOperation(c.FullPath(), c.Writer.Status()) {
 		return
 	}
 	p := current(c)
 	logObservation(c, h.deps.repository.RecordActivity(c.Request.Context(), p.ID, p.Type == auth.PrincipalUser))
 	if p.Session != nil {
 		logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), *p.Session))
-	}
-}
-func (h handlers) observeAdminSession(c *gin.Context, token string) {
-	session, ok := (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).VerifySessionDetails(token)
-	if ok {
-		logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), session))
 	}
 }
 func (h handlers) forgetAdminSession(c *gin.Context) {

@@ -293,11 +293,10 @@ On Go, pre-existing sessions appear when next used; logout removes observed sess
 and signing-key rotation excludes sessions signed with previous keys.
 Use an OIDC provider that verifies email ownership before issuing the email used for
 admin access; providers that omit `email_verified` must enforce that guarantee themselves.
-Go buffers activity for up to five seconds (bounded to 4,096 pending principal/day entries),
-flushes when statistics are read and during graceful shutdown, and retries failed flushes.
+Go buffers activity for up to five seconds, flushes when statistics are read and during graceful shutdown, and retries failed flushes.
 A crash, buffer overflow, or database failure can lose observations; failures are logged.
 Workers schedules counter writes through `waitUntil`; counter failures are logged and
-do not fail the user operation. Internal test callers await the same write.
+do not fail the user operation.
 HTML storage excludes database/infrastructure overhead. Go versions predating this change
 have unknown byte sizes and are shown explicitly rather than counted as zero.
 Apply database migrations before deploying; normal Go startup applies them automatically.
