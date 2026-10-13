@@ -36,6 +36,28 @@ async function runtime(ceiling = 0, groups = false, accelerated = false) {
         async page(...args){this.pages++;return super.page(...args)}
         async fetch(request){
           const path=new URL(request.url).pathname;
+          // Test-only native consumer: host HTTP buffers must not manufacture
+          // demand when asserting the producer's paging and inactivity bounds.
+          if(path.endsWith('/consumer/open') || path.endsWith('/consumer/idle')) {
+            const url=new URL(request.url);url.pathname='/v1/documents/doc/kv/events';
+            const response=await super.fetch(new Request(url,request));
+            this.controlledReader=response.body.getReader();
+            const first=await this.controlledReader.read();
+            if(path.endsWith('/consumer/idle')) {
+              await new Promise(resolve=>setTimeout(resolve,55000));
+              return new Response(null,{status:204});
+            }
+            return new Response(first.value);
+          }
+          if(path.endsWith('/consumer/read')) {
+            const chunk=await this.controlledReader.read();
+            return new Response(chunk.value,{headers:{'X-consumer-done':String(chunk.done)}});
+          }
+          if(path.endsWith('/consumer/cancel')) {
+            await this.controlledReader.cancel();
+            return new Response(null,{status:204});
+          }
+
           if(path.endsWith('/age-demand')){for(const sub of this.subscribers)sub.lastDemandAt=Date.now()-45001;return new Response(null,{status:204})}
           if(path.endsWith('/fail-authorization')){this.failAuthorization=(await request.text())==='true';return new Response(null,{status:204})}
           if(path==='/heartbeat')this.heartbeatInvocations++;
@@ -139,7 +161,29 @@ async function runtime(ceiling = 0, groups = false, accelerated = false) {
   };
   const patch = (set: Record<string, unknown>, user = "owner") =>
     request("kv", { method: "PATCH", body: JSON.stringify({ set }) }, user);
-  return { mf, env, request, patch };
+  async function controlledReader(query: string, headers: Record<string, string> = {}) {
+    const response = await request(`consumer/open${query}`, { headers });
+    expect(response.status).toBe(200);
+    let first: Uint8Array | undefined = new Uint8Array(await response.arrayBuffer());
+    return {
+      async read() {
+        if (first) {
+          const value = first;
+          first = undefined;
+          return { value, done: false };
+        }
+        const response = await request("consumer/read");
+        return {
+          value: new Uint8Array(await response.arrayBuffer()),
+          done: response.headers.get("X-consumer-done") === "true",
+        };
+      },
+      async cancel() {
+        await request("consumer/cancel");
+      },
+    };
+  }
+  return { mf, env, request, patch, controlledReader };
 }
 describe("document state and real Durable Object streams", () => {
   it("keeps more than 100 heartbeats within fresh D1 budgets and closes revoked or idle readers", async () => {
@@ -512,11 +556,9 @@ describe("document state and real Durable Object streams", () => {
   );
   it("releases an abandoned stream and records its presence leave", async () => {
     const f = await runtime();
-    const response = await f.request("kv/events?session=idle_session");
-    const reader = response.body!.getReader();
-    await reader.read();
-    await reader.cancel();
-    await new Promise((resolve) => setTimeout(resolve, 55000));
+    // Keep a native consumer idle inside the actor. Undici can prefetch
+    // keepalives after a host reader pauses or cancels, extending the lease.
+    expect((await f.request("consumer/idle?session=idle_session")).status).toBe(204);
     const leave = await f.env.DB.prepare(
       "SELECT event_json FROM document_events WHERE kind='presence' ORDER BY revision DESC LIMIT 1",
     ).first<{ event_json: string }>();
@@ -524,6 +566,23 @@ describe("document state and real Durable Object streams", () => {
       data: { session: "idle_session", left: true },
     });
   }, 65000);
+  it("records a native consumer cancellation through the private close invocation", async () => {
+    const f = await runtime();
+    const reader = await f.controlledReader("?session=cancelled_session");
+    await reader.read();
+    await reader.cancel();
+    await expect
+      .poll(
+        async () => {
+          const leave = await f.env.DB.prepare(
+            "SELECT event_json FROM document_events WHERE kind='presence' ORDER BY revision DESC LIMIT 1",
+          ).first<{ event_json: string }>();
+          return leave ? JSON.parse(leave.event_json) : null;
+        },
+        { timeout: 5000 },
+      )
+      .toMatchObject({ data: { session: "cancelled_session", left: true } });
+  });
   it("bounds unread live events at 32 and disconnects overflow with a resumable leave", async () => {
     const f = await runtime();
     const response = await f.request("kv/events?session=overflow_session");
@@ -599,10 +658,9 @@ describe("document state and real Durable Object streams", () => {
         }),
       );
     await f.env.DB.prepare("INSERT INTO document_revisions VALUES('doc',112)").run();
-    const response = await f.request("kv/events?after_revision=0", {
-      headers: { "Last-Event-ID": "2" },
+    const reader = await f.controlledReader("?after_revision=0", {
+      "Last-Event-ID": "2",
     });
-    const reader = response.body!.getReader();
     cleanup.unshift(() => reader.cancel());
     const before = (await (await f.request("debug")).json()) as {
       pages: number;
