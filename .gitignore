@@ -76,3 +76,16 @@ api/internal/server/download_dist/**
 /brag-output/
 frontend/tmp/
 .DS_Store
+
+# Cloudflare build and local state. Real instance configuration lives outside Git.
+node_modules/
+workers/dist/
+.wrangler/
+workers/.wrangler/
+workers/wrangler.app.jsonc
+workers/wrangler.render.jsonc
+.dev.vars
+.dev.vars.*
+*.local.json
+workers/shared/bridge.generated.ts
+workers/shared/install.generated.ts

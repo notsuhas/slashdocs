@@ -1,0 +1,143 @@
+name: Cloudflare
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cloudflare.yml'
+      - 'package.json'
+      - 'bun.lock'
+      - 'workers/**'
+      - 'frontend/**'
+      - 'cli/**'
+      - 'api/**'
+      - 'internal/**'
+      - 'skills/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'docs/cloudflare/**'
+  push:
+    branches: [main, master, cloudflare]
+    paths:
+      - '.github/workflows/cloudflare.yml'
+      - 'package.json'
+      - 'bun.lock'
+      - 'workers/**'
+      - 'frontend/**'
+      - 'cli/**'
+      - 'api/**'
+      - 'internal/**'
+      - 'skills/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'docs/cloudflare/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: Cloudflare parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Check Workers
+        run: |
+          bun run typecheck:workers
+          bun run lint:workers
+          bun run format:check:workers
+          bun run test:workers
+      - name: Check retained frontend
+        run: |
+          bun run --cwd frontend lint
+          bun run --cwd frontend format:check
+          bun run --cwd frontend test
+      # Go API tests embed the built reader and sandbox bridge.
+      - name: Build deployable assets and CLI binaries
+        run: bun run build:cloudflare
+      - name: Test retained Go API and CLI contracts
+        run: go test ./api/... ./cli/...
+      - name: Bundle both Workers without credentials
+        run: |
+          bun x wrangler deploy --dry-run --config workers/wrangler.app.example.jsonc --outdir /tmp/slashdocs-app
+          bun x wrangler deploy --dry-run --config workers/wrangler.render.example.jsonc --outdir /tmp/slashdocs-render
+
+  deploy:
+    name: Deploy production
+    needs: verify
+    if: vars.CLOUDFLARE_DEPLOY_ENABLED == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    concurrency:
+      group: slashdocs-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+      - name: Restore private instance configuration
+        env:
+          SLASHDOCS_INSTANCE_JSON: ${{ secrets.SLASHDOCS_INSTANCE_JSON }}
+          SLASHDOCS_LABELS_ENABLED: ${{ vars.SLASHDOCS_LABELS_ENABLED }}
+        shell: python
+        run: |
+          import json, os, pathlib
+          raw = os.environ.get('SLASHDOCS_INSTANCE_JSON', '')
+          if not raw:
+              raise SystemExit('Configure SLASHDOCS_INSTANCE_JSON in the production environment.')
+          config = json.loads(raw)
+          labels = os.environ.get('SLASHDOCS_LABELS_ENABLED', '')
+          if labels:
+              if labels not in ('true', 'false'):
+                  raise SystemExit('SLASHDOCS_LABELS_ENABLED must be true or false.')
+              config['labelsEnabled'] = labels == 'true'
+          def mask(value):
+              if isinstance(value, str) and value:
+                  escaped = value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print('::add-mask::' + escaped)
+              elif isinstance(value, dict):
+                  for item in value.values(): mask(item)
+              elif isinstance(value, list):
+                  for item in value: mask(item)
+          mask(config)
+          directory = pathlib.Path(os.environ['RUNNER_TEMP']) / 'slashdocs-instance'
+          directory.mkdir(mode=0o700, exist_ok=True)
+          directory.chmod(0o700)
+          path = directory / 'instance.json'
+          fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+          with os.fdopen(fd, 'w') as file:
+              os.fchmod(file.fileno(), 0o600)
+              json.dump(config, file)
+          with open(os.environ['GITHUB_ENV'], 'a') as file:
+              file.write('SLASHDOCS_INSTANCE_CONFIG=' + str(path) + '\n')
+      - name: Migrate and deploy both Workers
+        run: bun workers/scripts/deploy.ts
+      - name: Remove private runner files
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/slashdocs-instance"

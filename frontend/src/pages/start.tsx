@@ -1,3 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api";
+import { queryKeys } from "@/lib/queryKeys";
+import { useEffect } from "react";
 import { useTitle } from "@/lib/use-title";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -27,6 +31,11 @@ const PATHS: { value: SetupPath; label: string }[] = [
 export function StartPage() {
   useTitle("Get started");
   const { state, setStep, setPath, skip } = useOnboarding();
+  const config = useQuery({ queryKey: queryKeys.config(), queryFn: api.getConfig });
+  const mcpEnabled = config.data?.capabilities?.mcp !== false;
+  useEffect(() => {
+    if (config.isSuccess && !mcpEnabled && state.path === "mcp") setPath("cli");
+  }, [config.isSuccess, mcpEnabled, state.path, setPath]);
   const loginCmd = `slashdocs auth login ${publicURL()}`;
   const { done, total } = onboardingProgress(state);
   const nav = useNavigate();
@@ -90,7 +99,7 @@ export function StartPage() {
         label="Setup path"
         value={state.path}
         onChange={setPath}
-        options={PATHS}
+        options={mcpEnabled ? PATHS : PATHS.filter((p) => p.value === "cli")}
         className="enter mb-4"
       />
 

@@ -1,3 +1,5 @@
+> **Optional Cloudflare deployment:** A Hono/D1/R2 publish-and-review foundation is available alongside the Go server. See [Cloudflare setup and current limitations](docs/cloudflare/README.md). The documentation below describes the Go deployment.
+
 # slashdocs
 
 [![CI](https://github.com/razorpay/slashdocs/actions/workflows/ci.yml/badge.svg)](https://github.com/razorpay/slashdocs/actions/workflows/ci.yml)

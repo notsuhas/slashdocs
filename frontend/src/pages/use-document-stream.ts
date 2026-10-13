@@ -8,6 +8,7 @@ import {
   type Principal,
 } from "@/api";
 import { queryKeys } from "@/lib/queryKeys";
+import { useCapability } from "@/lib/hooks";
 import { samePrincipal } from "@/lib/principals";
 
 // The server lists a viewer for 45 seconds after their last report.
@@ -36,6 +37,7 @@ export function useDocumentEvents(
   docId: string,
   handlers: DocumentEventHandlers,
   session?: string,
+  enabled = true,
 ) {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
@@ -43,6 +45,7 @@ export function useDocumentEvents(
   const lastRevision = useRef(0);
 
   useEffect(() => {
+    if (!enabled) return;
     const params = new URLSearchParams(session ? { session } : {});
     // The browser resumes dropped streams itself. Only a stream it gave up on
     // is opened again here, and it continues from the last event it saw.
@@ -78,7 +81,7 @@ export function useDocumentEvents(
       source.close();
       window.clearTimeout(reconnect);
     };
-  }, [docId, session, attempt]);
+  }, [docId, session, attempt, enabled]);
 }
 
 // useDocumentStream is the document page's view of the event stream. It
@@ -96,6 +99,9 @@ export function useDocumentStream({
   onRemoteDocumentChange: () => void;
 }) {
   const q = useQueryClient();
+  const realtime = useCapability("realtime");
+  const onRemoteDocumentChangeRef = useRef(onRemoteDocumentChange);
+  onRemoteDocumentChangeRef.current = onRemoteDocumentChange;
   const [session] = useState(() => crypto.randomUUID());
   const kvListeners = useRef(new Set<DocumentKVListener>());
   const [sessions, setSessions] = useState<ReadonlyMap<string, Viewer>>(new Map());
@@ -131,7 +137,35 @@ export function useDocumentStream({
       },
     },
     session,
+    realtime,
   );
+
+  useEffect(() => {
+    if (realtime) return;
+    let stopped = false;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const latest = await api.getDocument(docId);
+        if (stopped) return;
+        if (latest.current_version_id && latest.current_version_id !== version)
+          onRemoteDocumentChangeRef.current();
+        q.setQueryData(queryKeys.document(docId), latest);
+        void q.invalidateQueries({ queryKey: queryKeys.comments(docId) });
+        void q.invalidateQueries({ queryKey: queryKeys.versions(docId) });
+      } catch {
+        /* Existing query state retains the last successful document. */
+      }
+    };
+    const interval = window.setInterval(() => void refresh(), 60000);
+    const onVisible = () => void refresh();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [docId, version, realtime, q]);
 
   // Viewers whose tab closed without a goodbye drop out after the TTL.
   useEffect(() => {
@@ -154,8 +188,9 @@ export function useDocumentStream({
     window.clearTimeout(pendingReport.current);
     pendingReport.current = undefined;
     lastReport.current = Date.now();
-    api.postDocumentPresence(docId, { session, ...place.current }).catch(() => {});
-  }, [docId, session]);
+    if (realtime)
+      api.postDocumentPresence(docId, { session, ...place.current }).catch(() => {});
+  }, [docId, session, realtime]);
   const scheduleReport = useCallback(() => {
     if (pendingReport.current !== undefined) return;
     const wait = Math.max(0, lastReport.current + REPORT_INTERVAL - Date.now());

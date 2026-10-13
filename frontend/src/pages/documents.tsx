@@ -33,7 +33,11 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 
+import { useCapability } from "@/lib/hooks";
+
 export function DocumentsPage() {
+  const foldersEnabled = useCapability("folders");
+  const config = useQuery({ queryKey: queryKeys.config(), queryFn: api.getConfig });
   useTitle("Documents");
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -56,7 +60,7 @@ export function DocumentsPage() {
     queryKey: [...queryKeys.folders(), debouncedQ],
     queryFn: () => api.listFolders(undefined, undefined, debouncedQ || undefined),
     placeholderData: (prev) => prev,
-    enabled: !structuredSearch,
+    enabled: foldersEnabled && !structuredSearch,
   });
   const { state: onb } = useOnboarding();
   const nav = useNavigate();
@@ -208,7 +212,11 @@ export function DocumentsPage() {
           What did your agents publish?
         </h1>
         <div className="enter mx-auto mt-8 max-w-2xl" style={beat(2)}>
-          <DocumentSearchInput value={q} onChange={setQ} />
+          <DocumentSearchInput
+            titleOnly={config.data?.capabilities?.search === "title"}
+            value={q}
+            onChange={setQ}
+          />
         </div>
       </section>
       <div
@@ -220,17 +228,19 @@ export function DocumentsPage() {
         </h2>
         <div className="flex items-center gap-2">
           <ViewModeToggle />
-          <Button
-            variant="outline"
-            size="md"
-            aria-label="New folder"
-            tooltip="New folder"
-            onClick={() => setNewFolderOpen(true)}
-            className="shrink-0 px-3 sm:px-4"
-          >
-            <Plus className="h-3.5 w-3.5 sm:mr-1.5" />{" "}
-            <span className="hidden sm:inline">New folder</span>
-          </Button>
+          {foldersEnabled && (
+            <Button
+              variant="outline"
+              size="md"
+              aria-label="New folder"
+              tooltip="New folder"
+              onClick={() => setNewFolderOpen(true)}
+              className="shrink-0 px-3 sm:px-4"
+            >
+              <Plus className="h-3.5 w-3.5 sm:mr-1.5" />{" "}
+              <span className="hidden sm:inline">New folder</span>
+            </Button>
+          )}
           <Dropdown>
             <DropdownTrigger asChild>
               <Button

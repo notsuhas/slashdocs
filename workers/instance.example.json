@@ -1,0 +1,10 @@
+{
+  "accountId": "00000000000000000000000000000000",
+  "apiToken": "REPLACE_WITH_SCOPED_TOKEN_OUTSIDE_REPOSITORY",
+  "appOrigin": "https://docs.example.com",
+  "renderOrigin": "https://docs-content.example.com",
+  "allowedEmails": ["owner@example.com"],
+  "allowedDomains": ["company.example"],
+  "googleClientId": "REPLACE_WITH_GOOGLE_CLIENT_ID",
+  "googleClientSecret": "REPLACE_WITH_GOOGLE_CLIENT_SECRET"
+}

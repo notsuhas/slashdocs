@@ -1,0 +1,62 @@
+{
+  "name": "slashdocs-local",
+  "main": "app/src/index.ts",
+  "compatibility_date": "2026-07-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist/app",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/v1/*",
+      "/.well-known/*",
+      "/mcp",
+      "/mcp/*",
+      "/oauth/*",
+      "/api-docs",
+      "/api-docs/*",
+      "/openapi.json",
+      "/livez",
+      "/readyz",
+      "/install.sh",
+      "/cli/*",
+      "/skills/*",
+      "/",
+      "/login",
+      "/app/*",
+    ],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "slashdocs-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "app/migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "DOCUMENTS", "bucket_name": "slashdocs-files" }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "DOCUMENT_REALTIME", "class_name": "DocumentRealtime" },
+      { "name": "DOCUMENT_SEARCH", "class_name": "DocumentSearch" },
+      { "name": "NOTIFICATION_DELIVERY", "class_name": "NotificationDelivery" },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "DocumentRealtime",
+        "NotificationDelivery",
+        "DocumentSearch",
+      ],
+    },
+  ],
+  "vars": {
+    "APP_ORIGIN": "http://localhost:8787",
+    "RENDER_ORIGIN": "http://127.0.0.1:8788",
+    "ALLOWED_EMAILS": "owner@example.com",
+    "ALLOWED_DOMAINS": "example.com",
+    "DEPLOYMENT": "org",
+  },
+}

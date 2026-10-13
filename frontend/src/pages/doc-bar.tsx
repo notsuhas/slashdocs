@@ -111,7 +111,11 @@ export function DocBar({
     staleTime: 30_000,
   });
   const currentAccessRole = access.data?.current_role;
-  const canManageAccess = canManage || canManageSharing(currentAccessRole);
+  const canManageAccess =
+    canManage ||
+    (config.isSuccess &&
+      config.data.capabilities?.owner_managed_sharing !== true &&
+      canManageSharing(currentAccessRole));
   const canEdit =
     canManage || (ROLE_RANK[currentAccessRole || ""] || 0) >= ROLE_RANK.editor;
   const shareFrameFocusRef = useRef<HTMLIFrameElement | null>(null);

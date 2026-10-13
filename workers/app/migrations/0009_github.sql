@@ -1,0 +1,3 @@
+CREATE TABLE github_connections(user_id TEXT PRIMARY KEY REFERENCES users(id),github_user_id INTEGER NOT NULL,login TEXT NOT NULL,avatar_url TEXT NOT NULL,access_token_ciphertext BLOB NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE github_repo_access(user_id TEXT NOT NULL REFERENCES github_connections(user_id) ON DELETE CASCADE,owner TEXT NOT NULL,repo TEXT NOT NULL,can_read INTEGER NOT NULL,checked_at TEXT NOT NULL,PRIMARY KEY(user_id,owner,repo));
+CREATE TABLE github_oauth_states(state_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),redirect TEXT NOT NULL,expires_at INTEGER NOT NULL);

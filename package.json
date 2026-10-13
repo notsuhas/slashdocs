@@ -1,0 +1,39 @@
+{
+  "name": "slashdocs-cloudflare",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "typecheck:workers": "bun workers/scripts/build-bridge.ts && tsc -p workers/tsconfig.json --noEmit",
+    "test:workers": "bun workers/scripts/build-bridge.ts && vitest run --config workers/vitest.config.ts",
+    "build:cloudflare": "bun workers/scripts/build-bridge.ts && bun run --cwd frontend build && bun workers/scripts/build-assets.ts",
+    "dev:cloudflare": "wrangler dev --config workers/wrangler.app.example.jsonc --local",
+    "format:workers": "prettier --write workers docs/cloudflare",
+    "format:check:workers": "prettier --check workers docs/cloudflare",
+    "lint:workers": "eslint --config workers/eslint.config.js workers"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "jose": "^6.2.2",
+    "parse5": "^8.0.1",
+    "snowball-stemmers": "^0.6.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261012.1",
+    "@types/bun": "^1.4.0",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.12.0",
+    "miniflare": "4.20260730.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "5.0.4",
+    "wrangler": "^4.149.0"
+  }
+}

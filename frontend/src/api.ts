@@ -28,6 +28,20 @@ export type Document = {
   snippet?: string;
 };
 export type ServerConfig = {
+  capabilities?: { search?: "title" | "full_text" } & Partial<
+    Record<
+      | "folders"
+      | "service_accounts"
+      | "notifications"
+      | "realtime"
+      | "document_kv"
+      | "structured_mentions"
+      | "mcp"
+      | "api_reference"
+      | "owner_managed_sharing",
+      boolean
+    >
+  >;
   deployment: "public" | "org";
   org_name: string;
   everyone_label: string;

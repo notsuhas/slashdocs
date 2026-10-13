@@ -1,0 +1,1190 @@
+[
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Accept an incoming service-account ownership transfer.",
+    "inputSchema": {
+      "properties": {
+        "transfer_id": {
+          "description": "Ownership transfer ID.",
+          "type": "string"
+        }
+      },
+      "required": ["transfer_id"],
+      "type": "object"
+    },
+    "name": "accept_service_account_transfer"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Create a review comment anchored to exact text in a document version.",
+    "inputSchema": {
+      "properties": {
+        "body": {
+          "description": "Comment text.",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "prefix": {
+          "description": "Text immediately before the quote.",
+          "type": "string"
+        },
+        "quote": {
+          "description": "Exact selected text.",
+          "type": "string"
+        },
+        "suffix": {
+          "description": "Text immediately after the quote.",
+          "type": "string"
+        },
+        "version_id": {
+          "description": "Document version ID (ver_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "version_id", "body", "quote"],
+      "type": "object"
+    },
+    "name": "create_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Create a slashdocs document from complete self-contained HTML. Returns its document and initial version IDs. The server applies its configured default sharing at create; when a default grant was applied, the result carries default_grant (grant_id, principal, role) plus a warning describing who can access the document and how to revoke the grant.",
+    "inputSchema": {
+      "properties": {
+        "html": {
+          "description": "Complete self-contained HTML, up to 50 MiB.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Human-readable document title.",
+          "type": "string"
+        }
+      },
+      "required": ["title", "html"],
+      "type": "object"
+    },
+    "name": "create_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Create a folder at the workspace root or below a parent folder.",
+    "inputSchema": {
+      "properties": {
+        "parent_folder_id": {
+          "description": "Optional parent folder ID.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Folder title.",
+          "type": "string"
+        }
+      },
+      "required": ["title"],
+      "type": "object"
+    },
+    "name": "create_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Request transfer of a service account to another slashdocs user.",
+    "inputSchema": {
+      "properties": {
+        "service_account_id": {
+          "description": "Service account ID (sa_…).",
+          "type": "string"
+        },
+        "to_user_email": {
+          "description": "Recipient's slashdocs user email.",
+          "type": "string"
+        }
+      },
+      "required": ["service_account_id", "to_user_email"],
+      "type": "object"
+    },
+    "name": "create_service_account_transfer"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Decline an incoming service-account ownership transfer.",
+    "inputSchema": {
+      "properties": {
+        "transfer_id": {
+          "description": "Ownership transfer ID.",
+          "type": "string"
+        }
+      },
+      "required": ["transfer_id"],
+      "type": "object"
+    },
+    "name": "decline_service_account_transfer"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Permanently delete a document comment.",
+    "inputSchema": {
+      "properties": {
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id"],
+      "type": "object"
+    },
+    "name": "delete_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Permanently delete a document and its versions.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "delete_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Permanently delete a folder and its subfolders.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id"],
+      "type": "object"
+    },
+    "name": "delete_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Return the slashdocs single-file HTML authoring and publishing guidelines. Call without arguments for the section index, then fetch the sections relevant to your task; read at least the core section before creating or updating a document.",
+    "inputSchema": {
+      "properties": {
+        "section": {
+          "description": "Guidelines section path from the index, e.g. \"core\", \"rendering theme\", or \"all\" for every section. Omit for the index.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_authoring_guidelines"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Get document metadata, including owner, folder and current_version_id.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "get_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Fetch raw document HTML. Omit version_id to fetch the current version.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "version_id": {
+          "description": "Document version ID (ver_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "get_document_html"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Get metadata for a specific document version.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "version_id": {
+          "description": "Document version ID (ver_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "version_id"],
+      "type": "object"
+    },
+    "name": "get_document_version"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Get folder metadata and its visible ancestor breadcrumbs.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id"],
+      "type": "object"
+    },
+    "name": "get_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Return this slashdocs server's deployment mode, organisation label, and public configuration.",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "get_server_config"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List document comment threads, optionally filtered by status or version.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "status": {
+          "description": "Optional status filter.",
+          "enum": ["open", "resolved", "stale", "orphaned", "all"],
+          "type": "string"
+        },
+        "version_id": {
+          "description": "Optional version filter.",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "list_comments"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List effective access to a document and the grants that provide it.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "list_document_access"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List all versions of a document.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "list_document_versions"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List documents visible to the caller, optionally filtering by title.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Optional title search text.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_documents"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List effective access to a folder and the grants that provide it.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id"],
+      "type": "object"
+    },
+    "name": "list_folder_access"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List documents directly contained in a folder.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id"],
+      "type": "object"
+    },
+    "name": "list_folder_documents"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Browse the workspace root or a folder's contents by ID or path.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder whose contents should be listed.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Folder path, for example /Team/Reports.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_folders"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List key metadata for a service account. Secret tokens are never returned after creation.",
+    "inputSchema": {
+      "properties": {
+        "service_account_id": {
+          "description": "Service account ID (sa_…).",
+          "type": "string"
+        }
+      },
+      "required": ["service_account_id"],
+      "type": "object"
+    },
+    "name": "list_service_account_keys"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List incoming service-account ownership transfers.",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_service_account_transfers"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "List service accounts owned by the authenticated user.",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "list_service_accounts"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Move a document into a folder, or move it to the workspace root. Pass exactly one of folder_id or to_root=true.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "folder_id": {
+          "description": "Destination folder ID (fld_…).",
+          "type": "string"
+        },
+        "to_root": {
+          "description": "Move the document to the workspace root.",
+          "type": "boolean"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "move_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Move a document into a folder.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id", "document_id"],
+      "type": "object"
+    },
+    "name": "move_document_to_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Move a document out of its current folder to the workspace root.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id", "document_id"],
+      "type": "object"
+    },
+    "name": "move_document_to_root"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Move a folder under a new parent, or to the workspace root by omitting parent_folder_id.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        },
+        "parent_folder_id": {
+          "description": "New parent folder ID; omit for root.",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id"],
+      "type": "object"
+    },
+    "name": "move_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Add your reaction to a document comment or reply.",
+    "inputSchema": {
+      "properties": {
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "emoji": {
+          "description": "Reaction slug.",
+          "enum": [
+            "+1",
+            "-1",
+            "laugh",
+            "hooray",
+            "confused",
+            "heart",
+            "rocket",
+            "eyes",
+            "plus"
+          ],
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id", "emoji"],
+      "type": "object"
+    },
+    "name": "react_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Rename a document without changing its HTML or access grants.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "title": {
+          "description": "New document title.",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "title"],
+      "type": "object"
+    },
+    "name": "rename_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Rename a folder without changing its contents or grants.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        },
+        "title": {
+          "description": "New folder title.",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id", "title"],
+      "type": "object"
+    },
+    "name": "rename_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Reopen a resolved document comment thread.",
+    "inputSchema": {
+      "properties": {
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id"],
+      "type": "object"
+    },
+    "name": "reopen_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Reply to an existing document comment thread.",
+    "inputSchema": {
+      "properties": {
+        "body": {
+          "description": "Reply text.",
+          "type": "string"
+        },
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id", "body"],
+      "type": "object"
+    },
+    "name": "reply_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Ask the current document owner to grant you access. Repeated requests are coalesced.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "request_document_access"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Mark a document comment thread as resolved.",
+    "inputSchema": {
+      "properties": {
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id"],
+      "type": "object"
+    },
+    "name": "resolve_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Revoke an existing document grant.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "grant_id": {
+          "description": "Grant ID.",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "grant_id"],
+      "type": "object"
+    },
+    "name": "revoke_document_grant"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Revoke an existing folder grant.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        },
+        "grant_id": {
+          "description": "Grant ID.",
+          "type": "string"
+        }
+      },
+      "required": ["folder_id", "grant_id"],
+      "type": "object"
+    },
+    "name": "revoke_folder_grant"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Permanently revoke a service-account bearer key.",
+    "inputSchema": {
+      "properties": {
+        "key_id": {
+          "description": "Key ID (sak_…).",
+          "type": "string"
+        },
+        "service_account_id": {
+          "description": "Service account ID (sa_…).",
+          "type": "string"
+        }
+      },
+      "required": ["service_account_id", "key_id"],
+      "type": "object"
+    },
+    "name": "revoke_service_account_key"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Search visible folders by title.",
+    "inputSchema": {
+      "properties": {
+        "query": {
+          "description": "Folder title search text.",
+          "type": "string"
+        }
+      },
+      "required": ["query"],
+      "type": "object"
+    },
+    "name": "search_folders"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Grant document access to an email/bot address or to everyone. Pass exactly one of address or everyone=true.",
+    "inputSchema": {
+      "properties": {
+        "address": {
+          "description": "User email or bot address.",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "everyone": {
+          "description": "Grant access to everyone who can reach the server.",
+          "type": "boolean"
+        },
+        "role": {
+          "default": "viewer",
+          "description": "Role to grant.",
+          "enum": ["viewer", "commenter", "editor"],
+          "type": "string"
+        }
+      },
+      "required": ["document_id"],
+      "type": "object"
+    },
+    "name": "share_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Grant folder access to an email/bot address or to everyone. Pass exactly one of address or everyone=true.",
+    "inputSchema": {
+      "properties": {
+        "address": {
+          "description": "User email or bot address.",
+          "type": "string"
+        },
+        "everyone": {
+          "description": "Grant access to everyone who can reach the server.",
+          "type": "boolean"
+        },
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        },
+        "role": {
+          "default": "viewer",
+          "description": "Role to grant.",
+          "enum": ["viewer", "commenter", "editor"],
+          "type": "string"
+        }
+      },
+      "required": ["folder_id"],
+      "type": "object"
+    },
+    "name": "share_folder"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Remove your reaction from a document comment or reply.",
+    "inputSchema": {
+      "properties": {
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "emoji": {
+          "description": "Reaction slug.",
+          "enum": [
+            "+1",
+            "-1",
+            "laugh",
+            "hooray",
+            "confused",
+            "heart",
+            "rocket",
+            "eyes",
+            "plus"
+          ],
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id", "emoji"],
+      "type": "object"
+    },
+    "name": "unreact_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Update a comment's body and/or status.",
+    "inputSchema": {
+      "properties": {
+        "body": {
+          "description": "Replacement comment text.",
+          "type": "string"
+        },
+        "comment_id": {
+          "description": "Comment ID (cmt_…).",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "status": {
+          "description": "Replacement status.",
+          "enum": ["open", "resolved"],
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "comment_id"],
+      "type": "object"
+    },
+    "name": "update_comment"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "description": "Publish complete HTML as a new document version using optimistic concurrency.",
+    "inputSchema": {
+      "properties": {
+        "base_version_id": {
+          "description": "Version on which these edits are based.",
+          "type": "string"
+        },
+        "change_summary": {
+          "description": "Short summary of the changes, one change per line.",
+          "type": "string"
+        },
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "html": {
+          "description": "Complete replacement HTML, up to 50 MiB.",
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "base_version_id", "html"],
+      "type": "object"
+    },
+    "name": "update_document"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Change an existing document grant's role.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID (doc_…).",
+          "type": "string"
+        },
+        "grant_id": {
+          "description": "Grant ID.",
+          "type": "string"
+        },
+        "role": {
+          "enum": ["viewer", "commenter", "editor"],
+          "type": "string"
+        }
+      },
+      "required": ["document_id", "grant_id", "role"],
+      "type": "object"
+    },
+    "name": "update_document_grant"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Change an existing folder grant's role.",
+    "inputSchema": {
+      "properties": {
+        "folder_id": {
+          "description": "Folder ID (fld_…).",
+          "type": "string"
+        },
+        "grant_id": {
+          "description": "Grant ID.",
+          "type": "string"
+        },
+        "role": {
+          "enum": ["viewer", "commenter", "editor"],
+          "type": "string"
+        }
+      },
+      "required": ["folder_id", "grant_id", "role"],
+      "type": "object"
+    },
+    "name": "update_folder_grant"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Rename, enable, or disable a service account.",
+    "inputSchema": {
+      "properties": {
+        "disabled": {
+          "description": "Set true to disable or false to enable.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "New full service-account name.",
+          "type": "string"
+        },
+        "service_account_id": {
+          "description": "Service account ID (sa_…).",
+          "type": "string"
+        }
+      },
+      "required": ["service_account_id"],
+      "type": "object"
+    },
+    "name": "update_service_account"
+  },
+  {
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "description": "Return the authenticated slashdocs principal used by this MCP connection.",
+    "inputSchema": {
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "name": "whoami"
+  }
+]

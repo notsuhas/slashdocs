@@ -29,8 +29,10 @@ type Suggestions = { heading: string; items: Suggestion[]; status?: string };
 export function DocumentSearchInput({
   value,
   onChange,
+  titleOnly = false,
 }: {
   value: string;
+  titleOnly?: boolean;
   onChange: (value: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,13 +48,13 @@ export function DocumentSearchInput({
   const people = useQuery({
     queryKey: queryKeys.userSearch(lookupText),
     queryFn: () => api.searchUsers(lookupText),
-    enabled: lookup.key === "from" && lookupText.length >= 2,
+    enabled: !titleOnly && lookup.key === "from" && lookupText.length >= 2,
     staleTime: 30_000,
   });
   const folders = useQuery({
     queryKey: [...queryKeys.folders(), lookupText],
     queryFn: () => api.listFolders(undefined, undefined, lookupText),
-    enabled: lookup.key === "in" && lookupText.length >= 1,
+    enabled: !titleOnly && lookup.key === "in" && lookupText.length >= 1,
     staleTime: 30_000,
   });
 
@@ -80,7 +82,7 @@ export function DocumentSearchInput({
     searching: people.isFetching || folders.isFetching,
   });
   const items = suggestions?.items || [];
-  const open = focused && !dismissed && !!suggestions;
+  const open = !titleOnly && focused && !dismissed && !!suggestions;
 
   useEffect(() => setActiveIndex(0), [suggestions?.heading, items.length]);
 
@@ -142,7 +144,11 @@ export function DocumentSearchInput({
             choose(activeIndex);
           }
         }}
-        placeholder="Search every word, even the footnotes…"
+        placeholder={
+          titleOnly
+            ? "Search document titles…"
+            : "Search every word, even the footnotes…"
+        }
         className="h-14 w-full rounded-[18px] bg-[var(--color-surface)] pl-14 pr-5 text-base text-transparent caret-[var(--color-fg)] shadow-[0_12px_40px_rgb(20_30_48/0.1)] outline-none placeholder:text-[var(--color-fg-muted)] dark:shadow-[0_14px_36px_rgb(0_0_0/0.42)]"
         role="combobox"
         aria-label="Search documents"
@@ -162,7 +168,7 @@ export function DocumentSearchInput({
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-14 right-5 flex items-center overflow-hidden whitespace-pre text-base text-[var(--color-fg)]"
       >
-        <HighlightedQuery value={value} />
+        {titleOnly ? value : <HighlightedQuery value={value} />}
       </div>
       {open ? (
         <div

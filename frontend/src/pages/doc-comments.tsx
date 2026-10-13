@@ -66,6 +66,7 @@ import {
 import { NotificationToggle } from "@/components/notification-toggle";
 import type { CommentDraft } from "@/lib/comment-drafts";
 import { useDoc } from "./doc-context";
+import { useCapability } from "@/lib/hooks";
 import { ReactionBar } from "./doc-comment-reactions";
 
 function MentionTextarea({
@@ -85,6 +86,7 @@ function MentionTextarea({
   className?: string;
   autoFocus?: boolean;
 }) {
+  const structuredMentions = useCapability("structured_mentions");
   const ref = useRef<HTMLTextAreaElement>(null);
   const beforeInputSelection = useRef<TextSelection | null>(null);
   // Caret position to apply right after the commit that renders an accepted
@@ -100,7 +102,10 @@ function MentionTextarea({
   const [suggestionQuery, setSuggestionQuery] = useState("");
   const [position, setPosition] = useState({ left: 0, top: 0, width: 0 });
   const visible =
-    open && suggestions.length > 0 && suggestionQuery === target?.query.trim();
+    structuredMentions &&
+    open &&
+    suggestions.length > 0 &&
+    suggestionQuery === target?.query.trim();
 
   // Use the browser event: React's synthetic beforeinput omits paste and some
   // native edits, which previously cleared every accepted mention on change.
@@ -158,7 +163,7 @@ function MentionTextarea({
 
   useEffect(() => {
     const query = target?.query.trim() || "";
-    if (query.length < 2) {
+    if (!structuredMentions || query.length < 2) {
       setSuggestions([]);
       setOpen(false);
       return;
@@ -183,7 +188,7 @@ function MentionTextarea({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [target?.query]);
+  }, [target?.query, structuredMentions]);
 
   useLayoutEffect(() => {
     if (caretRestore.current === null) return;
@@ -196,7 +201,7 @@ function MentionTextarea({
   });
 
   const accept = (user: UserPrincipal) => {
-    if (!target) return;
+    if (!structuredMentions || !target) return;
     if (draft.mentions.length >= MAX_COMMENT_MENTIONS) {
       toast.error(`A comment can mention up to ${MAX_COMMENT_MENTIONS} people.`);
       setOpen(false);
