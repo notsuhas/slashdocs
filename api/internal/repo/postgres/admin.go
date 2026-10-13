@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -62,7 +63,22 @@ func (s *Store) FlushAdminActivity(ctx context.Context) error {
 		return nil
 	}
 	batch := new(pgx.Batch)
-	for key, count := range pending {
+	keys := make([]activityKey, 0, len(pending))
+	for key := range pending {
+		keys = append(keys, key)
+	}
+	// Every replica acquires row locks in the same order.
+	slices.SortFunc(keys, func(a, b activityKey) int {
+		if a.day < b.day || (a.day == b.day && a.principal < b.principal) {
+			return -1
+		}
+		if a == b {
+			return 0
+		}
+		return 1
+	})
+	for _, key := range keys {
+		count := pending[key]
 		batch.Queue(`INSERT INTO admin_activity(day,principal_id,is_user,requests,last_seen) VALUES($1,$2,$3,$4,$5) ON CONFLICT(day,principal_id) DO UPDATE SET requests=admin_activity.requests+excluded.requests,last_seen=greatest(admin_activity.last_seen,excluded.last_seen)`, key.day, key.principal, count.user, count.requests, count.lastSeen)
 	}
 	err := s.db.SendBatch(ctx, batch).Close()
@@ -91,7 +107,7 @@ func (s *Store) ObserveSession(ctx context.Context, session auth.VerifiedSession
 	if seen {
 		return nil
 	}
-	_, err := s.db.Exec(ctx, `INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id) VALUES($1,$2,to_timestamp($3),$4) ON CONFLICT(token_hash) DO UPDATE SET signing_key_id=excluded.signing_key_id WHERE admin_sessions.revoked_at IS NULL`, session.TokenHash, session.UserID, session.ExpiresAt, session.SigningKeyID)
+	_, err := s.db.Exec(ctx, `INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id) VALUES($1,$2,to_timestamp($3),$4) ON CONFLICT(token_hash) DO NOTHING`, session.TokenHash, session.UserID, session.ExpiresAt, session.SigningKeyID)
 	if err != nil {
 		return err
 	}
@@ -126,12 +142,11 @@ func (s *Store) AdminStats(ctx context.Context, keyID string) (repo.AdminStats, 
  (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user AND day>=(now() AT TIME ZONE 'UTC')::date-30 AND last_seen>now()-interval '30 days'),
  (SELECT count(DISTINCT user_id) FROM admin_sessions WHERE expires_at>now() AND revoked_at IS NULL AND signing_key_id=$1),
  (SELECT count(*) FROM admin_sessions WHERE expires_at>now() AND revoked_at IS NULL AND signing_key_id=$1),
- (SELECT count(*) FROM documents),(SELECT count(*) FROM versions),
- (SELECT coalesce(sum(byte_length),0) FROM versions),
- (SELECT count(*) FROM versions WHERE byte_length IS NULL),
+ (SELECT count(*) FROM documents),v.versions,v.storage_bytes,v.unknown_size_versions,
  (SELECT count(*) FROM comments),
  (SELECT count(*) FROM service_accounts WHERE disabled_at IS NULL),
- (SELECT (tracking_started_at AT TIME ZONE 'UTC')::date::text FROM admin_metadata WHERE id=1)`, keyID).Scan(&out.Users, &out.Active24h, &out.Active7d, &out.Active30d, &out.LoggedInUsers, &out.Sessions, &out.Documents, &out.Versions, &out.StorageBytes, &out.UnknownSizeVersions, &out.Comments, &out.ServiceAccounts, &out.TrackingSince)
+ (SELECT (tracking_started_at AT TIME ZONE 'UTC')::date::text FROM admin_metadata WHERE id=1)
+ FROM (SELECT count(*) AS versions,coalesce(sum(byte_length),0) AS storage_bytes,count(*) FILTER(WHERE byte_length IS NULL) AS unknown_size_versions FROM versions) v`, keyID).Scan(&out.Users, &out.Active24h, &out.Active7d, &out.Active30d, &out.LoggedInUsers, &out.Sessions, &out.Documents, &out.Versions, &out.StorageBytes, &out.UnknownSizeVersions, &out.Comments, &out.ServiceAccounts, &out.TrackingSince)
 	if err != nil {
 		return out, err
 	}

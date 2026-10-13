@@ -102,7 +102,7 @@ not represent Cloudflare billing or anonymous render traffic. Counter writes use
 `waitUntil`; failures are logged without failing the user operation. Daily activity
 records are retained for 31 UTC calendar days and pruned on the first API operation
 each UTC day. Enable `cleanupCron` for hourly cleanup, including during periods with
-no API traffic. Expired sessions are removed by both cleanup paths. Tracking
+no API traffic. Expired sessions are removed during configured scheduled maintenance. Tracking
 initialization persists independently of traffic and retention.
 Use an OIDC provider that verifies email ownership before granting email-based admin
 access; if it omits `email_verified`, it must enforce that guarantee itself.

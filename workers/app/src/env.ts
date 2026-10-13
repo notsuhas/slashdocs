@@ -53,5 +53,8 @@ export interface Actor {
   credentialKind: "session" | "cli" | "service_account" | "mcp";
   credentialId?: string;
 }
-export type AppEnv = { Bindings: Env; Variables: { actor: Actor } };
+export type AppEnv = {
+  Bindings: Env;
+  Variables: { actor: Actor; unknownApiRoute?: boolean };
+};
 export type Role = "viewer" | "commenter" | "editor" | "owner";

@@ -24,7 +24,7 @@ type AdminStats struct {
 	UnknownSizeVersions int64      `json:"unknown_size_versions"`
 	Comments            int64      `json:"comments"`
 	ServiceAccounts     int64      `json:"service_accounts"`
-	TrackingSince       *string    `json:"tracking_since"`
+	TrackingSince       string     `json:"tracking_since"`
 	Daily               []AdminDay `json:"daily"`
 }
 type AdminStatistics interface {

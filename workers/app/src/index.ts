@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import type { AppEnv } from "./env";
 import { ApiError } from "../../shared/errors";
 import { authRoutes, requireAuth } from "./routes/auth";
-import { observeActivity, pruneAdminObservations } from "./services/admin";
+import { requireObservedAuth, pruneAdminObservations } from "./services/admin";
 import { adminRoutes } from "./routes/admin";
 import { configRoutes } from "./routes/config";
 import { documentRoutes } from "./routes/documents";
@@ -87,8 +87,7 @@ app.get("/readyz", async (c) => {
 app.route("/", configRoutes);
 app.route("/", authRoutes);
 const secured = new Hono<AppEnv>();
-secured.use("/v1/*", requireAuth);
-secured.use("/v1/*", observeActivity);
+secured.use("/v1/*", requireObservedAuth);
 const activityLimit = activityRateLimit();
 for (const path of [
   "/v1/me/notifications",
@@ -120,7 +119,8 @@ apiDocs.get("/api-docs", (c) => c.redirect("/api-docs/index.html", 302));
 apiDocs.get("/api-docs/*", (c) => c.env.ASSETS.fetch(c.req.raw));
 apiDocs.get("/openapi.json", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.route("/", apiDocs);
-app.all("/v1/*", () => {
+app.all("/v1/*", (c) => {
+  c.set("unknownApiRoute", true);
   throw new ApiError(404, "not_found", "Unknown API route");
 });
 app.route(
@@ -140,7 +140,6 @@ app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: AppEnv["Bindings"]) {
-    await pruneAdminObservations(env);
     if (!env.DOCUMENT_SEARCH)
       throw new Error("Document search binding is not configured");
     const response = await env.DOCUMENT_SEARCH.get(
@@ -162,6 +161,7 @@ export default {
       );
     const now = Math.floor(Date.now() / 1000);
     await env.DB.batch([
+      env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(now),
       env.DB.prepare("DELETE FROM mcp_tokens WHERE expires_at<=?").bind(now),
       env.DB.prepare("DELETE FROM mcp_codes WHERE expires_at<=?").bind(now),
       env.DB.prepare("DELETE FROM mcp_consent WHERE expires_at<=?").bind(now),
@@ -185,5 +185,6 @@ export default {
         .bind(object_key)
         .run();
     }
+    await pruneAdminObservations(env);
   },
 };

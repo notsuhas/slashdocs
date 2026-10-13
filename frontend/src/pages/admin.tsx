@@ -76,11 +76,7 @@ export function AdminPage() {
         <div className="space-y-6">
           <p className="text-sm text-[var(--color-fg-muted)]">
             Updated {new Date(stats.dataUpdatedAt).toLocaleTimeString()}. Activity
-            tracking{" "}
-            {data.tracking_since
-              ? `since ${data.tracking_since}`
-              : "has no recorded requests yet"}
-            .
+            tracking since {data.tracking_since}.
           </p>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
@@ -160,8 +156,7 @@ export function AdminPage() {
                   date.setUTCDate(date.getUTCDate() - index);
                   const day = date.toISOString().slice(0, 10);
                   const row = data.daily.find((item) => item.day === day);
-                  const tracked =
-                    data.tracking_since !== null && day >= data.tracking_since;
+                  const tracked = day >= data.tracking_since;
                   return (
                     <tr key={day} className="border-t border-[var(--color-border)]">
                       <td className="py-3">{day}</td>

@@ -11,7 +11,7 @@ export type AdminStats = {
   unknown_size_versions: number;
   comments: number;
   service_accounts: number;
-  tracking_since: string | null;
+  tracking_since: string;
   daily: { day: string; requests: number; active_users: number }[];
 };
 

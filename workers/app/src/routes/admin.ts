@@ -17,12 +17,12 @@ adminRoutes.get("/v1/admin/stats", async (c) => {
     (SELECT count(DISTINCT s.user_id) FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.expires_at>? AND u.provider NOT IN ('service_account','placeholder')) AS logged_in_users,
     (SELECT count(*) FROM sessions WHERE expires_at>?) AS sessions,
     (SELECT count(*) FROM documents WHERE deleted_at IS NULL) AS documents,
-    (SELECT count(*) FROM versions v JOIN documents d ON d.id=v.document_id WHERE d.deleted_at IS NULL) AS versions,
-    (SELECT coalesce(sum(v.byte_length),0) FROM versions v JOIN documents d ON d.id=v.document_id WHERE d.deleted_at IS NULL) AS storage_bytes,
+    v.versions, v.storage_bytes,
     0 AS unknown_size_versions,
     (SELECT count(*) FROM comments c JOIN documents d ON d.id=c.document_id WHERE c.deleted_at IS NULL AND d.deleted_at IS NULL) AS comments,
     (SELECT count(*) FROM service_accounts WHERE disabled_at IS NULL) AS service_accounts,
-    (SELECT tracking_started_at FROM admin_metadata WHERE id=1) AS tracking_since`,
+    (SELECT tracking_started_at FROM admin_metadata WHERE id=1) AS tracking_since
+    FROM (SELECT count(*) AS versions,coalesce(sum(v.byte_length),0) AS storage_bytes FROM versions v JOIN documents d ON d.id=v.document_id WHERE d.deleted_at IS NULL) v`,
   )
     .bind(
       since(1).slice(0, 10),

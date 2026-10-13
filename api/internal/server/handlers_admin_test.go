@@ -112,7 +112,7 @@ func TestAdminRetentionAndInitialization(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	stats, err := e.store.AdminStats(ctx, "")
-	if err != nil || stats.TrackingSince == nil || len(stats.Daily) != 0 {
+	if err != nil || stats.TrackingSince == "" || len(stats.Daily) != 0 {
 		t.Fatalf("initialization: %+v %v", stats, err)
 	}
 	if _, err := e.store.Pool().Exec(ctx, "INSERT INTO admin_activity VALUES('2000-01-01','old',true,5,'2000-01-01'); INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id) VALUES('old','owner_1','2000-01-01','old-key')"); err != nil {
@@ -126,7 +126,7 @@ func TestAdminRetentionAndInitialization(t *testing.T) {
 		t.Fatalf("retention: rows=%d err=%v", rows, err)
 	}
 	after, err := e.store.AdminStats(ctx, "")
-	if err != nil || after.TrackingSince == nil || *after.TrackingSince != *stats.TrackingSince {
+	if err != nil || after.TrackingSince == "" || after.TrackingSince != stats.TrackingSince {
 		t.Fatalf("tracking boundary changed: %+v %v", after, err)
 	}
 }

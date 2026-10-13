@@ -1,4 +1,6 @@
-import type { Env } from "../env";
+import type { Context, MiddlewareHandler } from "hono";
+import type { AppEnv, Env } from "../env";
+import { requireAuth } from "../auth/middleware";
 import type { Principal } from "../../../shared/contracts";
 export function isAdmin(env: Env, user: Principal): boolean {
   return (
@@ -9,9 +11,6 @@ export function isAdmin(env: Env, user: Principal): boolean {
       .some((email) => email.trim().toLowerCase() === user.email?.toLowerCase())
   );
 }
-
-import type { Context, MiddlewareHandler } from "hono";
-import type { AppEnv } from "../env";
 
 export function countAdminOperation(path: string, status: number): boolean {
   return (
@@ -24,7 +23,8 @@ export function countAdminOperation(path: string, status: number): boolean {
 
 export const observeActivity: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
-  if (!countAdminOperation(c.req.path, c.res.status)) return;
+  if (c.get("unknownApiRoute") || !countAdminOperation(c.req.path, c.res.status))
+    return;
   const user = c.get("actor").principal;
   const now = new Date().toISOString();
   const operation = c.env.DB.prepare(
@@ -52,13 +52,15 @@ export const observeActivity: MiddlewareHandler<AppEnv> = async (c, next) => {
   else await operation;
 };
 
+export const requireObservedAuth: MiddlewareHandler<AppEnv> = (c, next) =>
+  requireAuth(c, async () => {
+    await observeActivity(c, next);
+  });
+
 export async function pruneAdminObservations(env: Env): Promise<void> {
   const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM admin_activity WHERE day<?").bind(cutoff),
-    env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(
-      Math.floor(Date.now() / 1000),
-    ),
     env.DB.prepare("UPDATE admin_metadata SET last_cleanup_day=? WHERE id=1").bind(
       new Date().toISOString().slice(0, 10),
     ),

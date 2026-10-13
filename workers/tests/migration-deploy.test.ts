@@ -45,7 +45,6 @@ describe("deployment migrations", () => {
         "0009_github.sql",
         "0010_grant_identities.sql",
         "0011_admin_observability.sql",
-        "0012_admin_lifecycle.sql",
       ]);
       for (const name of names) {
         const sql = await readFile(resolve(migrations, name), "utf8");

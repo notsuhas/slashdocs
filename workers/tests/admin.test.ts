@@ -4,7 +4,7 @@ import { requireAuth } from "../app/src/auth/middleware";
 import { activityRateLimit } from "../app/src/auth/activity-limit";
 import { observeActivity, pruneAdminObservations } from "../app/src/services/admin";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { app } from "../app/src/index";
+import worker, { app } from "../app/src/index";
 import { hashToken, nowSeconds } from "../app/src/auth/tokens";
 import { seedUser } from "./runtime";
 import { createMCPRuntime } from "./mcp-runtime";
@@ -233,7 +233,7 @@ it("persists initialization independently of first traffic and prunes old activi
     await runtime.env.DB.prepare(
       "SELECT count(*) AS n FROM sessions WHERE token_hash='expired'",
     ).first(),
-  ).toEqual({ n: 0 });
+  ).toEqual({ n: 1 });
 });
 it("records MCP API operations exactly once without counting discovery messages", async () => {
   const token = "slashdocs_mcp_admin";
@@ -286,7 +286,7 @@ it("does not count rate-limited API attempts", async () => {
   ).toEqual({ n: 60 });
 });
 
-it("prunes old records on the first operation without requiring a cron", async () => {
+it("prunes old activity without changing auth sessions on the first operation", async () => {
   await runtime.env.DB.prepare(
     "INSERT INTO admin_activity VALUES('2000-01-01','old',1,3,'2000-01-01T00:00:00.000Z')",
   ).run();
@@ -305,5 +305,43 @@ it("prunes old records on the first operation without requiring a cron", async (
     await runtime.env.DB.prepare(
       "SELECT count(*) AS n FROM sessions WHERE token_hash='expired-old'",
     ).first(),
+  ).toEqual({ n: 1 });
+  await worker.scheduled(
+    { scheduledTime: Date.now(), cron: "0 * * * *", noRetry() {} },
+    runtime.env,
+  );
+  expect(
+    await runtime.env.DB.prepare(
+      "SELECT count(*) AS n FROM sessions WHERE token_hash='expired-old'",
+    ).first(),
   ).toEqual({ n: 0 });
+});
+
+it("ignores unmatched routes but counts resource-not-found operations", async () => {
+  expect(
+    (
+      await app.request(
+        "https://app.example.com/v1/unknown-api",
+        { headers },
+        runtime.env,
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    await runtime.env.DB.prepare("SELECT count(*) AS n FROM admin_activity").first(),
+  ).toEqual({ n: 0 });
+  expect(
+    (
+      await app.request(
+        "https://app.example.com/v1/documents/missing",
+        { headers },
+        runtime.env,
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    await runtime.env.DB.prepare(
+      "SELECT sum(requests) AS n FROM admin_activity",
+    ).first(),
+  ).toEqual({ n: 1 });
 });
