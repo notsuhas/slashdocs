@@ -57,8 +57,8 @@ Required schema: folders with polymorphic owner type/ID, parent FK `ON DELETE SE
 
 Tests must execute actual D1 SQL via Miniflare: inheritance monotonicity, ownership isolation, revoked opened-item metadata, breadcrumb privacy, access provenance, title uniqueness, depth and concurrent cycle prevention, subtree deletion/foreign boundaries/collisions, document move source protection/owner escape, polymorphic pins and featured hide/permanent visibility.
 
-## Verification and remaining integration
+## Verification and provider configuration
 
 Real D1 regressions pair unrestricted metadata listing/search with denied child resource reads and mutations; private/missing GET denial; Unicode root/child duplicates, rename, paths, search, private root ambiguity and multiple foreign-boundary collision suffixes; concurrent create/reparent at depth 15; source/destination/document editor revocation between prechecks and the move SQL; mixed featured document/folder batches above 90 IDs and revoked pins.
 
-Google Groups remain a root integration dependency. Folder group-grant creation currently returns `503 google_group_unavailable`; group expansion in permissions, workspace and search is not complete. Service accounts use backing user identities with provider `service_account`, while folder DTOs use the stored `owner_type`. No full-parity claim should be made until the group integration and whole application checks pass.
+Google Groups are integrated into authentication, grants, inherited permissions, workspace and search. They require enabled directory configuration and a verified current customer membership snapshot; unavailable membership fails closed. Default deployments leave this optional provider disabled. Service accounts use backing user identities with provider `service_account`, while folder DTOs use the stored `owner_type`. Aggregate queries and guarded writes use the current deployment configuration, including during directory refresh races.

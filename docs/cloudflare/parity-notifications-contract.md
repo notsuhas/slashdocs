@@ -153,6 +153,4 @@ same SQLite Durable Object. Both empty and future minimum results must preserve
 the earlier wake. Concurrent wakes and a reentrant alarm are also exercised, along
 with continuous activity that must not postpone delivery.
 
-Full parity still depends on root wiring all mutation hooks, the Durable Object
-binding/export, scheduled recovery, and document-open tracking. This module does
-not independently replace shared permission semantics or Google-group policy.
+The app mounts the notification routes and delivery Durable Object, wires comment/mention/grant mutation hooks, and records document-open tracking. Delivery uses persisted outboxes, post-commit wakes and recovery alarms. A failed initial wake needs a later successful wake; the app has no always-running outbox poller. Shared permission and Google-group policy remain authoritative. Slack delivery requires a configured bot token; installing the backend alone does not configure Slack.
