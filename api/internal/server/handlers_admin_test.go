@@ -3,12 +3,13 @@ package server_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/razorpay/slashdocs/api/internal/auth"
-	"github.com/razorpay/slashdocs/api/internal/repo"
-	"github.com/razorpay/slashdocs/api/internal/server"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/razorpay/slashdocs/api/internal/auth"
+	"github.com/razorpay/slashdocs/api/internal/repo"
+	"github.com/razorpay/slashdocs/api/internal/server"
 )
 
 func TestAdminAuthorizationAndStats(t *testing.T) {
