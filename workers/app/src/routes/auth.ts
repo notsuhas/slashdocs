@@ -1,3 +1,4 @@
+import { isAdmin } from "../services/admin";
 import { z } from "zod";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -19,7 +20,12 @@ import {
   sessionToken,
   writeCookie,
 } from "../auth/tokens";
-import { checkOrigin, principal, requireAuth, type UserRow } from "../auth/middleware";
+import {
+  checkOrigin,
+  principal,
+  requireObservedAuth,
+  type UserRow,
+} from "../auth/middleware";
 export { requireAuth } from "../auth/middleware";
 type StateRow = {
   mode: string;
@@ -234,7 +240,7 @@ authRoutes.post("/v1/auth/logout", checkOrigin, async (c) => {
   writeCookie(c, cookieName(c), "", 0);
   return c.body(null, 204);
 });
-authRoutes.get("/v1/me", requireAuth, async (c) => {
+authRoutes.get("/v1/me", requireObservedAuth, async (c) => {
   const user = c.get("actor").principal;
   if (user.type === "service_account") {
     const account = await c.env.DB.prepare(
@@ -265,6 +271,7 @@ authRoutes.get("/v1/me", requireAuth, async (c) => {
     });
   }
   return c.json({
+    ...(isAdmin(c.env, user) ? { is_admin: true } : {}),
     principal: { type: user.type, id: user.id },
     user: {
       id: user.id,
@@ -274,7 +281,7 @@ authRoutes.get("/v1/me", requireAuth, async (c) => {
     },
   });
 });
-authRoutes.get("/v1/users", requireAuth, async (c) => {
+authRoutes.get("/v1/users", requireObservedAuth, async (c) => {
   const q = (c.req.query("q") ?? "").trim();
   if (q.length < 2) return c.json({ items: [] });
   const escaped = q.replace(/[\\%_]/g, "\\$&");
@@ -285,7 +292,7 @@ authRoutes.get("/v1/users", requireAuth, async (c) => {
     .all<UserRow>();
   return c.json({ items: rows.results.map(principal) });
 });
-authRoutes.get("/v1/auth/cli/credentials", requireAuth, async (c) => {
+authRoutes.get("/v1/auth/cli/credentials", requireObservedAuth, async (c) => {
   const rows = await c.env.DB.prepare(
     "SELECT id,name,created_at,last_used_at,revoked_at FROM cli_credentials WHERE user_id=? ORDER BY created_at DESC",
   )
@@ -293,7 +300,7 @@ authRoutes.get("/v1/auth/cli/credentials", requireAuth, async (c) => {
     .all();
   return c.json({ items: rows.results });
 });
-authRoutes.delete("/v1/auth/cli/credentials/:id", requireAuth, async (c) => {
+authRoutes.delete("/v1/auth/cli/credentials/:id", requireObservedAuth, async (c) => {
   await c.env.DB.prepare(
     "UPDATE cli_credentials SET revoked_at=? WHERE id=? AND user_id=?",
   )

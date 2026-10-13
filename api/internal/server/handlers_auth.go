@@ -56,6 +56,7 @@ type configResponse struct {
 // meResponse is the payload of GET /v1/me. Exactly one of User and
 // ServiceAccount is set, matching the principal type.
 type meResponse struct {
+	IsAdmin        bool              `json:"is_admin,omitempty"`
 	Principal      principalRef      `json:"principal"`
 	User           *userResponse     `json:"user,omitempty"`
 	ServiceAccount *meServiceAccount `json:"service_account,omitempty"`
@@ -408,12 +409,15 @@ func (h handlers) revokeCLICredential(c *gin.Context) {
 // @Success 204
 // @Router /v1/auth/logout [post]
 func (h handlers) logout(c *gin.Context) {
+	h.forgetAdminSession(c)
 	h.writeSessionCookie(c, "", -1)
 	c.Status(http.StatusNoContent)
 }
 
 func (h handlers) setSessionCookie(c *gin.Context, p auth.Principal) {
-	h.writeSessionCookie(c, (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).Sign(p.ID), sessionTTLSeconds)
+	token, session := (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).SignSession(p.ID)
+	logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), session))
+	h.writeSessionCookie(c, token, sessionTTLSeconds)
 }
 
 // writeSessionCookie sets the session cookie. A negative maxAge deletes it.
@@ -521,7 +525,7 @@ func (h handlers) commitTXT(c *gin.Context) {
 // @Router /v1/me [get]
 func (h handlers) me(c *gin.Context) {
 	p := current(c)
-	out := meResponse{Principal: principalRef{Type: p.Type, ID: p.ID}}
+	out := meResponse{IsAdmin: h.isAdmin(p), Principal: principalRef{Type: p.Type, ID: p.ID}}
 	if p.Type == auth.PrincipalUser {
 		user := userJSON(*p)
 		out.User = &user

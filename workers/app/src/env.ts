@@ -13,6 +13,7 @@ export interface Env {
   ALLOWED_EMAILS?: string;
   ALLOWED_DOMAINS?: string;
   SESSION_SECRET: string;
+  ADMIN_USERS?: string;
   RENDER_PRIVATE_KEY: string;
   RENDER_PUBLIC_KEY: string;
   DEFAULT_DOC_PERMISSION?: string;
@@ -52,5 +53,8 @@ export interface Actor {
   credentialKind: "session" | "cli" | "service_account" | "mcp";
   credentialId?: string;
 }
-export type AppEnv = { Bindings: Env; Variables: { actor: Actor } };
+export type AppEnv = {
+  Bindings: Env;
+  Variables: { actor: Actor };
+};
 export type Role = "viewer" | "commenter" | "editor" | "owner";

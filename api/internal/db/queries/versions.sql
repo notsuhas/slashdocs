@@ -1,11 +1,11 @@
 -- name: InsertInitialVersion :one
-INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text)
-VALUES($1,$2,1,$3,$4,NULL,$5,$6,'',sqlc.arg(search_text)::text)
+INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text,byte_length)
+VALUES($1,$2,1,$3,$4,NULL,$5,$6,'',sqlc.arg(search_text)::text,sqlc.arg(byte_length)::bigint)
 RETURNING created_at;
 
 -- name: InsertVersion :one
-INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,sqlc.arg(search_text)::text)
+INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text,byte_length)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,sqlc.arg(search_text)::text,sqlc.arg(byte_length)::bigint)
 RETURNING created_at;
 
 -- name: ListUnindexedVersions :many

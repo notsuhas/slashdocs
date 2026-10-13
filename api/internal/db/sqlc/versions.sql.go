@@ -79,8 +79,8 @@ func (q *Queries) GetVersionBlobKey(ctx context.Context, id string) (string, err
 }
 
 const insertInitialVersion = `-- name: InsertInitialVersion :one
-INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text)
-VALUES($1,$2,1,$3,$4,NULL,$5,$6,'',$7::text)
+INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text,byte_length)
+VALUES($1,$2,1,$3,$4,NULL,$5,$6,'',$7::text,$8::bigint)
 RETURNING created_at
 `
 
@@ -92,6 +92,7 @@ type InsertInitialVersionParams struct {
 	CreatedByType string
 	CreatedByID   string
 	SearchText    string
+	ByteLength    int64
 }
 
 func (q *Queries) InsertInitialVersion(ctx context.Context, arg InsertInitialVersionParams) (pgtype.Timestamptz, error) {
@@ -103,6 +104,7 @@ func (q *Queries) InsertInitialVersion(ctx context.Context, arg InsertInitialVer
 		arg.CreatedByType,
 		arg.CreatedByID,
 		arg.SearchText,
+		arg.ByteLength,
 	)
 	var created_at pgtype.Timestamptz
 	err := row.Scan(&created_at)
@@ -110,8 +112,8 @@ func (q *Queries) InsertInitialVersion(ctx context.Context, arg InsertInitialVer
 }
 
 const insertVersion = `-- name: InsertVersion :one
-INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text)
+INSERT INTO versions(id,document_id,number,html_blob_key,sha256,parent_version_id,created_by_type,created_by_id,change_summary,search_text,byte_length)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::text,$11::bigint)
 RETURNING created_at
 `
 
@@ -126,6 +128,7 @@ type InsertVersionParams struct {
 	CreatedByID     string
 	ChangeSummary   string
 	SearchText      string
+	ByteLength      int64
 }
 
 func (q *Queries) InsertVersion(ctx context.Context, arg InsertVersionParams) (pgtype.Timestamptz, error) {
@@ -140,6 +143,7 @@ func (q *Queries) InsertVersion(ctx context.Context, arg InsertVersionParams) (p
 		arg.CreatedByID,
 		arg.ChangeSummary,
 		arg.SearchText,
+		arg.ByteLength,
 	)
 	var created_at pgtype.Timestamptz
 	err := row.Scan(&created_at)

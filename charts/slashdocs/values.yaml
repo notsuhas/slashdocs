@@ -212,8 +212,8 @@ kvEvents:
 commitSha: ""
 
 extraEnv: []
-# - name: FOO
-#   value: bar
+# - name: ADMIN_USERS
+#   value: "you@example.com,other@example.com"
 
 extraEnvFrom: []
 # - secretRef:

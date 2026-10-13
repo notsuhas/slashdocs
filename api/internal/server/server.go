@@ -23,6 +23,7 @@ import (
 
 // Config holds static configuration for the server.
 type Config struct {
+	AdminUsers   []string
 	Environment  string
 	AppOrigin    string
 	RenderOrigin string
@@ -54,6 +55,7 @@ type Config struct {
 
 // Server wraps the gin engine.
 type Server struct {
+	adminRepository    repo.Repository
 	engine             *gin.Engine
 	notificationWorker *notifications.Worker
 }
@@ -64,6 +66,7 @@ type readinessCheck struct {
 }
 
 type dependencies struct {
+	adminUsers                []string
 	commentNotificationSender notifications.Sender
 	authenticator             auth.Authenticator
 	repository                repo.Repository
@@ -145,6 +148,7 @@ func (denyAllAuthenticator) Authenticate(_ *http.Request) (*auth.Principal, erro
 func New(cfg Config, opts ...Option) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	deps := dependencies{
+		adminUsers:           cfg.AdminUsers,
 		authenticator:        denyAllAuthenticator{},
 		stateStore:           auth.NewStateStore(),
 		oidc:                 cfg.OIDC,
@@ -201,7 +205,7 @@ func New(cfg Config, opts ...Option) *Server {
 	if len(cfg.PreviousOrigins) > 0 && cfg.AppOrigin != "" {
 		r.Use(movedOriginMiddleware(cfg.AppOrigin, cfg.PreviousOrigins))
 	}
-	s := &Server{engine: r}
+	s := &Server{engine: r, adminRepository: deps.repository}
 	if deps.commentNotificationSender != nil {
 		store, ok := deps.repository.(notifications.Store)
 		if !ok {
@@ -267,6 +271,8 @@ func (s *Server) routes(deps dependencies) {
 	activityLimit := activityRateLimit()
 	// A separate budget: presence heartbeats must not starve other activity.
 	presenceLimit := activityRateLimit()
+	authed.Use(h.observeActivity)
+	authed.GET("/admin/stats", h.adminStats)
 	authed.GET("/me", h.me)
 	authed.GET("/users", h.searchUsers)
 	authed.GET("/google-groups", h.searchGoogleGroups)

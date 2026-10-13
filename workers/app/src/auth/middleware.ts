@@ -1,3 +1,5 @@
+import { routePath } from "hono/route";
+import { optionalExecutionContext } from "../execution-context";
 import type { MiddlewareHandler } from "hono";
 import { internalActor } from "./internal-actor";
 import type { AppEnv } from "../env";
@@ -147,3 +149,43 @@ export async function revalidateActor(
       .first());
   return false;
 }
+
+function countAdminOperation(path: string, status: number): boolean {
+  return (
+    status !== 429 &&
+    path !== "/v1/*" &&
+    !path.startsWith("/v1/admin/") &&
+    path !== "/v1/documents/:id/presence" &&
+    path !== "/v1/documents/:id/kv/events"
+  );
+}
+
+const observeActivity: MiddlewareHandler<AppEnv> = async (c, next) => {
+  await next();
+  if (!countAdminOperation(routePath(c), c.res.status)) return;
+  const user = c.get("actor").principal;
+  const now = new Date().toISOString();
+  const operation = c.env.DB.prepare(
+    "INSERT INTO admin_activity(day,principal_id,is_user,last_seen) VALUES(?,?,?,?) ON CONFLICT(day,principal_id) DO UPDATE SET requests=requests+1,last_seen=max(last_seen,excluded.last_seen)",
+  )
+    .bind(now.slice(0, 10), user.id, user.type === "user" ? 1 : 0, now)
+    .run()
+    .catch((error: unknown) => {
+      console.error(
+        JSON.stringify({
+          event: "admin_observation_failed",
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    });
+  // Real Worker requests always provide an execution context. In-process Hono
+  // callers (tests, MCP dispatch) await the same work when none is supplied.
+  const execution = optionalExecutionContext(c);
+  if (execution) execution.waitUntil(operation);
+  else await operation;
+};
+
+export const requireObservedAuth: MiddlewareHandler<AppEnv> = (c, next) =>
+  requireAuth(c, async () => {
+    await observeActivity(c, next);
+  });

@@ -37,9 +37,9 @@ func (a DBAuthenticator) Authenticate(r *http.Request) (*Principal, error) {
 	}
 	if a.SessionSecret != "" {
 		if ck, err := r.Cookie("slashdocs_session"); err == nil {
-			uid, ok := (SessionCodec{Secret: []byte(a.SessionSecret)}).VerifySession(ck.Value)
+			session, ok := (SessionCodec{Secret: []byte(a.SessionSecret)}).VerifySessionDetails(ck.Value)
 			if ok {
-				p, err := a.Resolver.ResolveUser(r.Context(), uid)
+				p, err := a.Resolver.ResolveUser(r.Context(), session.UserID)
 				if err != nil {
 					// As with bearer auth, only a genuine "not found"
 					// means the session is invalid; surface everything
@@ -49,6 +49,7 @@ func (a DBAuthenticator) Authenticate(r *http.Request) (*Principal, error) {
 					}
 					return nil, err
 				}
+				p.Session = &session
 				return &p, nil
 			}
 		}

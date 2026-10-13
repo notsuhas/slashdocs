@@ -4,6 +4,9 @@ import { ZodError } from "zod";
 import type { AppEnv } from "./env";
 import { ApiError } from "../../shared/errors";
 import { authRoutes, requireAuth } from "./routes/auth";
+import { pruneAdminObservations } from "./services/admin";
+import { requireObservedAuth } from "./auth/middleware";
+import { adminRoutes } from "./routes/admin";
 import { configRoutes } from "./routes/config";
 import { documentRoutes } from "./routes/documents";
 import { versionRoutes } from "./routes/versions";
@@ -85,7 +88,7 @@ app.get("/readyz", async (c) => {
 app.route("/", configRoutes);
 app.route("/", authRoutes);
 const secured = new Hono<AppEnv>();
-secured.use("/v1/*", requireAuth);
+secured.use("/v1/*", requireObservedAuth);
 const activityLimit = activityRateLimit();
 for (const path of [
   "/v1/me/notifications",
@@ -96,6 +99,7 @@ for (const path of [
   secured.on(["GET", "PUT"], path, activityLimit);
 secured.post("/v1/documents/:id/access-requests", activityLimit);
 secured.post("/v1/documents/:id/presence", activityRateLimit());
+secured.route("/", adminRoutes);
 secured.route("/", documentRoutes);
 secured.route("/", versionRoutes);
 secured.route("/", grantRoutes);
@@ -121,8 +125,8 @@ app.all("/v1/*", () => {
 });
 app.route(
   "/",
-  createMCPRoutes((env, actor, request) =>
-    withInternalActor(request, actor, async () => app.fetch(request, env)),
+  createMCPRoutes((env, actor, request, execution) =>
+    withInternalActor(request, actor, async () => app.fetch(request, env, execution)),
   ),
 );
 app.get("/install.sh", (c) =>
@@ -157,6 +161,7 @@ export default {
       );
     const now = Math.floor(Date.now() / 1000);
     await env.DB.batch([
+      env.DB.prepare("DELETE FROM sessions WHERE expires_at<=?").bind(now),
       env.DB.prepare("DELETE FROM mcp_tokens WHERE expires_at<=?").bind(now),
       env.DB.prepare("DELETE FROM mcp_codes WHERE expires_at<=?").bind(now),
       env.DB.prepare("DELETE FROM mcp_consent WHERE expires_at<=?").bind(now),
@@ -180,5 +185,6 @@ export default {
         .bind(object_key)
         .run();
     }
+    await pruneAdminObservations(env);
   },
 };

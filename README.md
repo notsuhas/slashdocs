@@ -259,7 +259,47 @@ Uploaded HTML should be treated as untrusted content. `slashdocs` renders docume
 
 ## Telemetry
 
-None. `slashdocs` collects no telemetry, analytics, or usage data, and phones home to no one. The only outbound calls the server makes are to your Postgres, your blob storage, and your configured OpenID Connect provider during login.
+`slashdocs` does not send usage analytics to an external service. Admin observability
+records local daily API-operation counts and last activity per principal, plus hashed
+browser-session identifiers and their expiry on Go. This data stays in your database;
+admin access requires `ADMIN_USERS`. Activity records are retained for 31 UTC calendar
+days (enough for the rolling 30-day metric). Go cleans hourly; Workers cleans on
+the first API operation each UTC day and during configured scheduled maintenance.
+Enable Workers `cleanupCron` for hourly cleanup even when there is no API traffic.
+Expired sessions are removed during Go cleanup and configured Workers scheduled maintenance. Go retains a hashed logout
+marker through the original session expiry so in-flight requests on other replicas
+cannot restore a logged-out session to the dashboard.
+Your configured login, storage, GitHub, group-directory, and notification integrations
+make their normal outbound requests.
+
+## Admin observability
+
+Set `ADMIN_USERS=you@example.com,other@example.com` on the server (or app Worker)
+to enable **Admin statistics** in those users' account menus at `/app/admin`.
+The list matches signed-in email addresses case-insensitively; it does not bypass
+login restrictions. Empty/unset denies access, and service accounts cannot be admins.
+The API at `/v1/admin/stats` independently enforces this allowlist.
+
+Metrics cover signed-up human accounts, active humans in 24 hours/7 days/30 days,
+unexpired browser sessions, retained documents and uploaded versions, HTML bytes,
+comments/replies, enabled bots, and daily authenticated API requests over 30 UTC days.
+Activity tracking begins when this version is deployed; earlier totals cannot be reconstructed.
+API operations include REST requests and internal API dispatches made by MCP tools,
+including bots, automatic document refreshes, and failed authorized operations.
+They exclude dashboard requests, presence heartbeats, event streams, and 429 rejections,
+and do not measure anonymous traffic, render delivery, bandwidth, or hosting costs.
+Logged-in users have an unexpired session and are not necessarily online.
+On Go, pre-existing sessions appear when next used; logout removes observed sessions,
+and signing-key rotation excludes sessions signed with previous keys.
+Use an OIDC provider that verifies email ownership before issuing the email used for
+admin access; providers that omit `email_verified` must enforce that guarantee themselves.
+Go buffers activity for up to five seconds, flushes when statistics are read and during graceful shutdown, and retries failed flushes.
+A crash, buffer overflow, or database failure can lose observations; failures are logged.
+Workers schedules counter writes through `waitUntil`; counter failures are logged and
+do not fail the user operation.
+HTML storage excludes database/infrastructure overhead. Go versions predating this change
+have unknown byte sizes and are shown explicitly rather than counted as zero.
+Apply database migrations before deploying; normal Go startup applies them automatically.
 
 ## License
 

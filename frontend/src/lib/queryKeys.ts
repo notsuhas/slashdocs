@@ -1,6 +1,7 @@
 // React Query key factory. Keys share prefixes so related queries invalidate
 // together.
 export const queryKeys = {
+  adminStats: () => ["admin-stats"] as const,
   me: () => ["me"] as const,
   config: () => ["config"] as const,
   documents: () => ["documents"] as const,

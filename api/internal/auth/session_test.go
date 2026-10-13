@@ -1,6 +1,9 @@
 package auth_test
 
 import (
+	"encoding/hex"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,5 +67,61 @@ func TestSessionCodecRejectsWrongAudience(t *testing.T) {
 	uid, ok := codec.VerifyAudience(tok, "render")
 	if !ok || uid != "ver_1" {
 		t.Fatalf("VerifyAudience(render) = (%q, %v), want (\"ver_1\", true)", uid, ok)
+	}
+}
+
+func TestSessionDetailsRequiresValidSession(t *testing.T) {
+	codec := auth.SessionCodec{Secret: []byte("test-secret")}
+	session, ok := codec.VerifySessionDetails(codec.Sign("user"))
+	expiry := session.ExpiresAt
+	if !ok || expiry <= time.Now().Unix() {
+		t.Fatalf("expiry=%d ok=%v", expiry, ok)
+	}
+	for _, token := range []string{"", "v1.broken.token", codec.SignForAudience("user", "render", time.Hour), codec.SignForAudience("user", "session", -time.Hour), (auth.SessionCodec{Secret: []byte("other")}).Sign("user")} {
+		if _, ok := codec.VerifySessionDetails(token); ok {
+			t.Fatal("accepted invalid session")
+		}
+	}
+}
+
+func TestSessionCredentialsAreUniquePerLogin(t *testing.T) {
+	codec := auth.SessionCodec{Secret: []byte("test-secret")}
+	first, _ := codec.SignSession("user")
+	second, _ := codec.SignSession("user")
+	if first == second {
+		t.Fatal("separate logins reused a session credential")
+	}
+	for _, token := range []string{first, second} {
+		if _, ok := codec.VerifySessionDetails(token); !ok {
+			t.Fatal("new session did not verify")
+		}
+	}
+}
+
+func TestSessionKeyIDCannotForgeTokens(t *testing.T) {
+	for _, length := range []int{32, 64, 65, 88, 128} {
+		t.Run(fmt.Sprint(length), func(t *testing.T) {
+			codec := auth.SessionCodec{Secret: []byte(strings.Repeat("s", length))}
+			key, err := hex.DecodeString(codec.SigningKeyID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			attacker := auth.SessionCodec{Secret: key}
+			for _, audience := range []string{"session", "render", "mcp"} {
+				forged := attacker.SignForAudience("victim-admin", audience, time.Hour)
+				if _, ok := codec.VerifyAudience(forged, audience); ok {
+					t.Fatalf("stored key ID forged %s token", audience)
+				}
+			}
+		})
+	}
+}
+
+func TestSignedSessionMetadataMatchesVerification(t *testing.T) {
+	codec := auth.SessionCodec{Secret: []byte("test-secret")}
+	token, signed := codec.SignSession("user")
+	verified, ok := codec.VerifySessionDetails(token)
+	if !ok || signed != verified {
+		t.Fatalf("signed = %+v, verified = %+v, ok = %v", signed, verified, ok)
 	}
 }
