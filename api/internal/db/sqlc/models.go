@@ -326,6 +326,7 @@ type User struct {
 	GoogleSub          pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	NextNotificationAt pgtype.Timestamptz
+	LastLoginAt        pgtype.Timestamptz
 }
 
 type Version struct {

@@ -91,6 +91,13 @@ Apply D1 migrations before deploying this version. For generated deployments, se
 `ADMIN_USERS` as an app Worker secret so regenerating configuration preserves it;
 for local development, use `.dev.vars` or the example Wrangler `vars` block.
 
+The default user list shows identities, account dates, recorded sign-ins, activity,
+sessions and uploads. Search or filter logged-in users, then select a person to view
+uploaded or owned documents with titles, owners, dates, versions and HTML bytes.
+Uploads are attributed to version authors. Deleted documents are excluded. Older
+sign-in times are not backfilled; new verified sign-ins record their actual time.
+Opening document content retains the normal sharing checks.
+
 The dashboard reports signed-up human accounts, active humans over 24 hours/7 days/30 days,
 unexpired browser sessions, retained documents/versions, stored HTML bytes, comments,
 enabled bots, and daily authenticated API request totals over 30 UTC days. Logged-in

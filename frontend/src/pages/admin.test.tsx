@@ -13,6 +13,7 @@ function setup(admin: boolean) {
     is_admin: admin,
   } satisfies Awaited<ReturnType<typeof api.me>>;
   vi.spyOn(api, "me").mockResolvedValue(me);
+  vi.spyOn(api, "adminUsers").mockResolvedValue({ items: [], has_more: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(queryKeys.me(), me);
   render(
@@ -22,6 +23,7 @@ function setup(admin: boolean) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  if (admin) fireEvent.click(screen.getByRole("button", { name: "Overview" }));
   return client;
 }
 it("does not request platform statistics for ordinary users", async () => {

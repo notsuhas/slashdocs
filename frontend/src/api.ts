@@ -1,3 +1,35 @@
+export type AdminUser = {
+  id: string;
+  email: string;
+  name: string;
+  picture_url: string;
+  created_at: string;
+  last_login_at: string | null;
+  last_active_at: string | null;
+  sessions: number;
+  documents_uploaded: number;
+  versions_uploaded: number;
+  owned_documents: number;
+  requests_30d: number;
+};
+export type AdminDocument = {
+  id: string;
+  title: string;
+  owner_id: string;
+  owner_name: string;
+  owner_email: string;
+  created_at: string;
+  updated_at: string;
+  first_upload_at: string | null;
+  last_upload_at: string | null;
+  versions_uploaded: number;
+  total_versions: number;
+  storage_bytes: number;
+  unknown_size_versions: number;
+};
+export type AdminUserStatus = "all" | "logged_in" | "active";
+export type AdminDocumentKind = "uploaded" | "owned";
+export type AdminList<T> = { items: T[]; has_more: boolean };
 export type AdminStats = {
   users: number;
   active_24h: number;
@@ -325,6 +357,14 @@ export const api = {
       body: JSON.stringify({ enabled }),
     }),
   adminStats: () => request<AdminStats>("/v1/admin/stats"),
+  adminUsers: (q: string, status: AdminUserStatus, page: number) =>
+    request<AdminList<AdminUser>>(
+      `/v1/admin/users?${new URLSearchParams({ q, status, page: String(page) })}`,
+    ),
+  adminUserDocuments: (id: string, kind: AdminDocumentKind, q: string, page: number) =>
+    request<AdminList<AdminDocument>>(
+      `/v1/admin/users/${encodeURIComponent(id)}/documents?${new URLSearchParams({ kind, q, page: String(page) })}`,
+    ),
   me: () =>
     request<{
       principal: Principal;

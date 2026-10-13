@@ -157,7 +157,7 @@ for (const provider of ["google", "oidc"]) {
         keys.subject,
       ),
       c.env.DB.prepare(
-        "UPDATE users SET email=?,name=?,picture_url=? WHERE provider=? AND provider_subject=?",
+        "UPDATE users SET email=?,name=?,picture_url=?,last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE provider=? AND provider_subject=?",
       ).bind(email, displayName, picture, keys.provider, keys.subject),
     ]);
     const user = await c.env.DB.prepare(

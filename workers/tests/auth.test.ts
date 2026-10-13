@@ -231,6 +231,10 @@ describe("authentication with D1", () => {
     expect((await login({}, "wrong-client")).status).toBe(401);
     const success = await login({});
     expect(success.status).toBe(302);
+    const signedIn = await runtime.env.DB.prepare(
+      "SELECT last_login_at FROM users WHERE email='person@example.com'",
+    ).first<{ last_login_at: string }>();
+    expect(signedIn?.last_login_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     const cookie = success.headers
       .get("Set-Cookie")!
       .split(", ")

@@ -280,6 +280,13 @@ The list matches signed-in email addresses case-insensitively; it does not bypas
 login restrictions. Empty/unset denies access, and service accounts cannot be admins.
 The API at `/v1/admin/stats` independently enforces this allowlist.
 
+The dashboard opens on a searchable list of signed-up users: name, email, account
+creation, recorded sign-in and activity times, browser sessions, uploads, and API usage.
+Select a person to inspect their document titles, owners, upload dates, versions, and
+recorded HTML bytes. Uploads follow version authorship; ownership is shown separately.
+Metadata is visible to admins across the platform; opening document content still uses
+normal sharing permissions. Older sign-in times are unknown and shown as not recorded.
+
 Metrics cover signed-up human accounts, active humans in 24 hours/7 days/30 days,
 unexpired browser sessions, retained documents and uploaded versions, HTML bytes,
 comments/replies, enabled bots, and daily authenticated API requests over 30 UTC days.

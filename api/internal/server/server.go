@@ -278,6 +278,8 @@ func (s *Server) routes(deps dependencies) {
 	cursorLimit := activityRateLimit(1200)
 	authed.Use(h.observeActivity)
 	authed.GET("/admin/stats", h.adminStats)
+	authed.GET("/admin/users", h.adminUsers)
+	authed.GET("/admin/users/:id/documents", h.adminUserDocuments)
 	authed.GET("/me", h.me)
 	authed.GET("/users", h.searchUsers)
 	authed.GET("/google-groups", h.searchGoogleGroups)
