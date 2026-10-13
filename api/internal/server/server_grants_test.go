@@ -88,24 +88,31 @@ func TestPatchGrantRejectsOwnerRole(t *testing.T) {
 	assertStatus(t, rr, http.StatusBadRequest)
 }
 
-func TestCommenterCanManageDocumentGrants(t *testing.T) {
+func TestEditorCanManageDocumentGrants(t *testing.T) {
 	e := newTestEnv(t)
-	commenter := map[string]string{
-		"Content-Type":     "application/json",
-		"X-Test-Principal": principalHeader(fixtureCommenter),
+	as := func(p auth.Principal) map[string]string {
+		return map[string]string{"Content-Type": "application/json", "X-Test-Principal": principalHeader(p)}
 	}
-
-	rr := do(t, e.h, http.MethodPost, "/v1/documents/"+e.doc.ID+"/grants", fmt.Sprintf(`{
+	grant := fmt.Sprintf(`{
 	  "principal": { "type": "service_account", "id": %q },
 	  "role": "viewer"
-	}`, e.sa.ID), commenter)
+	}`, e.sa.ID)
+
+	rr := do(t, e.h, http.MethodPost, "/v1/documents/"+e.doc.ID+"/grants", grant, as(fixtureCommenter))
+	assertStatus(t, rr, http.StatusForbidden)
+
+	rr = do(t, e.h, http.MethodPost, "/v1/documents/"+e.doc.ID+"/grants", grant, as(fixtureEditor))
 	assertStatus(t, rr, http.StatusCreated)
 	grantID := jsonField(t, rr.Body.Bytes(), "id")
 
-	rr = do(t, e.h, http.MethodPatch, "/v1/documents/"+e.doc.ID+"/grants/"+grantID, `{"role":"editor"}`, commenter)
+	rr = do(t, e.h, http.MethodPatch, "/v1/documents/"+e.doc.ID+"/grants/"+grantID, `{"role":"editor"}`, as(fixtureCommenter))
+	assertStatus(t, rr, http.StatusForbidden)
+	rr = do(t, e.h, http.MethodPatch, "/v1/documents/"+e.doc.ID+"/grants/"+grantID, `{"role":"editor"}`, as(fixtureEditor))
 	assertStatus(t, rr, http.StatusOK)
 
-	rr = do(t, e.h, http.MethodDelete, "/v1/documents/"+e.doc.ID+"/grants/"+grantID, "", commenter)
+	rr = do(t, e.h, http.MethodDelete, "/v1/documents/"+e.doc.ID+"/grants/"+grantID, "", as(fixtureCommenter))
+	assertStatus(t, rr, http.StatusForbidden)
+	rr = do(t, e.h, http.MethodDelete, "/v1/documents/"+e.doc.ID+"/grants/"+grantID, "", as(fixtureEditor))
 	assertStatus(t, rr, http.StatusNoContent)
 }
 

@@ -192,7 +192,7 @@ it("keeps document text and owner search permission scoped", async () => {
     (await app(reader).request("/v1/documents?q=from:owner", {}, env)).status,
   ).toBe(200);
 });
-it("lets commenters create grants and preserves access response", async () => {
+it("denies commenter sharing and preserves access response", async () => {
   const { env, actor } = await fixture();
   const doc = await createDocument(
     env,
@@ -236,7 +236,7 @@ it("lets commenters create grants and preserves access response", async () => {
         env,
       )
     ).status,
-  ).toBe(201);
+  ).toBe(403);
   await expect(requireDocument(env, reader, doc.id, "editor")).rejects.toMatchObject({
     status: 403,
   });

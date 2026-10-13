@@ -286,7 +286,7 @@ comments/replies, enabled bots, and daily authenticated API requests over 30 UTC
 Activity tracking begins when this version is deployed; earlier totals cannot be reconstructed.
 API operations include REST requests and internal API dispatches made by MCP tools,
 including bots, automatic document refreshes, and failed authorized operations.
-They exclude dashboard requests, presence heartbeats, event streams, and 429 rejections,
+They exclude dashboard requests, presence heartbeats, cursor updates, event streams, and 429 rejections,
 and do not measure anonymous traffic, render delivery, bandwidth, or hosting costs.
 Logged-in users have an unexpired session and are not necessarily online.
 On Go, pre-existing sessions appear when next used; logout removes observed sessions,

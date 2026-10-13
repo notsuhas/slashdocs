@@ -1,8 +1,8 @@
 import { createContext, useContext } from "react";
-import type { Anchor, Comment, Principal } from "@/api";
+import type { Anchor, Comment, CursorSpot, Principal } from "@/api";
 import type { CommentFilter } from "@/lib/constants";
 import type { CommentDraft } from "@/lib/comment-drafts";
-import type { DocumentKVListener } from "./use-document-stream";
+import type { CursorListener, DocumentKVListener } from "./use-document-stream";
 
 // A text selection captured from the render bridge that a new comment will
 // anchor to. `anchor` is present only when the bridge supplies real offsets.
@@ -55,6 +55,11 @@ export type DocContextValue = {
   handleRenderedDocumentClick: () => void;
   subscribeDocumentKV: (listener: DocumentKVListener) => () => void;
   reportViewport: (anchor?: Partial<Anchor>) => void;
+  moveCursor: (spot: CursorSpot | null) => void;
+  subscribeCursors: (listener: CursorListener) => () => void;
+  // The cursor of the viewer the reader asked to go to. Each request is a new
+  // object, so the same viewer can be followed again.
+  followedCursor?: { session: string };
 };
 
 const DocContext = createContext<DocContextValue | null>(null);

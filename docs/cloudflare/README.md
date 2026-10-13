@@ -97,7 +97,7 @@ enabled bots, and daily authenticated API request totals over 30 UTC days. Logge
 means a valid session, not current online presence. Activity starts with this deployment;
 pre-tracking dates display a dash. Usage counts REST requests and internal API dispatches made by MCP tools, including
 bots, automatic document refreshes, and failed authorized operations. It excludes
-dashboard requests, presence heartbeats, event streams, and 429 rejections, and does
+dashboard requests, presence heartbeats, cursor updates, event streams, and 429 rejections, and does
 not represent Cloudflare billing or anonymous render traffic. Counter writes use
 `waitUntil`; failures are logged without failing the user operation. Daily activity
 records are retained for 31 UTC calendar days and pruned on the first API operation

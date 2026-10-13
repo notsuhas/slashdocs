@@ -68,6 +68,14 @@ func (s *documentKVStream) sendBacklog() error {
 }
 
 func (s *documentKVStream) sendLive(event repo.DocumentKVEvent) error {
+	// A relayed event is not stored, so it has no revision to resume from.
+	if event.Revision == 0 {
+		if err := writeDocumentEventSSE(s.writer, event, false); err != nil {
+			return err
+		}
+		s.flusher.Flush()
+		return nil
+	}
 	if event.Revision <= s.lastSent {
 		return nil
 	}

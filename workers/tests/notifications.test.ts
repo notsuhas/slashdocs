@@ -607,7 +607,7 @@ describe("document grant HTTP mutations queue atomically", () => {
       (
         await request(
           "/v1/documents/doc/grants",
-          body({ principal: { type: "user", id: reader.id }, role: "commenter" }),
+          body({ principal: { type: "user", id: reader.id }, role: "editor" }),
         )
       ).status,
     ).toBe(201);

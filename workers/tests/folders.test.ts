@@ -271,7 +271,100 @@ describe("actual D1 folder parity", () => {
       (await requireDocument(env, stranger, doc.id, "owner")).document.parent_folder_id,
     ).toBeNull();
   });
-  it("preserves REST folder paths, null/absent patch semantics and commenter sharing", async () => {
+  it.each(["POST", "PATCH", "DELETE"])(
+    "rejects %s grant mutations after an editor downgrade",
+    async (method) => {
+      const { env, owner, other } = await fixture();
+      const folder = await createFolder(env, owner, "Downgrade");
+      await grant(env, owner, folder.id, other, "editor", "member_editor");
+      const created = await app(owner).request(
+        `/v1/folders/${folder.id}/grants`,
+        json({ principal: { type: "anyone" }, role: "viewer" }),
+        env,
+      );
+      expect(created.status).toBe(201);
+      const granted = z.object({ id: z.string() }).parse(await created.json());
+      const prefix =
+        method === "POST"
+          ? "INSERT INTO folder_grants"
+          : method === "PATCH"
+            ? "UPDATE folder_grants SET role"
+            : "DELETE FROM folder_grants";
+      let downgraded = false;
+      const guarded = {
+        ...env,
+        DB: new Proxy(env.DB, {
+          get(target, key) {
+            if (key === "prepare")
+              return (sql: string) => {
+                const statement = target.prepare(sql);
+                if (!sql.startsWith(prefix)) return statement;
+                const wrap = (bound: D1PreparedStatement): D1PreparedStatement =>
+                  new Proxy(bound, {
+                    get(target, key) {
+                      if (key === "bind")
+                        return (...args: unknown[]) => wrap(target.bind(...args));
+                      if (key === "run")
+                        return async () => {
+                          await env.DB.prepare(
+                            "UPDATE folder_grants SET role='commenter' WHERE id='member_editor'",
+                          ).run();
+                          downgraded = true;
+                          return target.run();
+                        };
+                      const value = Reflect.get(target, key);
+                      return typeof value === "function" ? value.bind(target) : value;
+                    },
+                  });
+                return wrap(statement);
+              };
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        }),
+      };
+      const path =
+        `/v1/folders/${folder.id}/grants` + (method === "POST" ? "" : `/${granted.id}`);
+      const input =
+        method === "DELETE"
+          ? { method }
+          : { ...json({ principal: { type: "anyone" }, role: "editor" }), method };
+      expect((await app(other).request(path, input, guarded)).status).toBe(
+        method === "POST" ? 403 : 404,
+      );
+      expect(downgraded).toBe(true);
+      expect(
+        await env.DB.prepare("SELECT role FROM folder_grants WHERE id=?")
+          .bind(granted.id)
+          .first(),
+      ).toEqual({ role: "viewer" });
+    },
+  );
+  it("denies commenters folder grant mutations", async () => {
+    const { env, owner, other } = await fixture();
+    const folder = await createFolder(env, owner, "Sharing");
+    await grant(env, owner, folder.id, other, "commenter");
+    const created = await app(owner).request(
+      `/v1/folders/${folder.id}/grants`,
+      json({ principal: { type: "anyone" }, role: "viewer" }),
+      env,
+    );
+    expect(created.status).toBe(201);
+    const granted = z.object({ id: z.string() }).parse(await created.json());
+    for (const [path, input] of [
+      [
+        `/v1/folders/${folder.id}/grants`,
+        json({ principal: { type: "anyone" }, role: "editor" }),
+      ],
+      [
+        `/v1/folders/${folder.id}/grants/${granted.id}`,
+        { ...json({ role: "editor" }), method: "PATCH" },
+      ],
+      [`/v1/folders/${folder.id}/grants/${granted.id}`, { method: "DELETE" }],
+    ] as const)
+      expect((await app(other).request(path, input, env)).status).toBe(403);
+  });
+  it("preserves REST folder paths, null/absent patch semantics and editor sharing", async () => {
     const { env, owner, other } = await fixture(),
       client = app(owner);
     const created = await client.request("/v1/folders", json({ title: "API" }), env);
@@ -295,7 +388,7 @@ describe("actual D1 folder parity", () => {
     );
     expect(moved.status, await moved.clone().text()).toBe(200);
     expect(await moved.json()).toMatchObject({ parent_folder_id: "" });
-    await grant(env, owner, root.id, other, "commenter");
+    await grant(env, owner, root.id, other, "editor");
     const shared = await app(other).request(
       `/v1/folders/${root.id}/grants`,
       json({ principal: { type: "anyone" }, role: "viewer" }),
@@ -304,7 +397,7 @@ describe("actual D1 folder parity", () => {
     expect(shared.status, await shared.clone().text()).toBe(201);
     const access = await app(other).request(`/v1/folders/${root.id}/access`, {}, env);
     expect(await access.json()).toMatchObject({
-      current_role: "commenter",
+      current_role: "editor",
       items: expect.any(Array),
     });
     const otherRoot = await createFolder(env, other, "API");

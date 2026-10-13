@@ -42,7 +42,7 @@ func logObservation(c *gin.Context, err error) {
 	}
 }
 func countAdminOperation(path string, status int) bool {
-	return status != http.StatusTooManyRequests && !strings.HasPrefix(path, "/v1/admin/") && path != "/v1/documents/:id/presence" && path != "/v1/documents/:id/kv/events"
+	return status != http.StatusTooManyRequests && !strings.HasPrefix(path, "/v1/admin/") && path != "/v1/documents/:id/cursor" && path != "/v1/documents/:id/presence" && path != "/v1/documents/:id/kv/events"
 }
 func (h handlers) observeActivity(c *gin.Context) {
 	c.Next()

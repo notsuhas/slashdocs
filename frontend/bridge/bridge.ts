@@ -13,6 +13,8 @@ import {
   highlightRange,
   refreshSVGRects,
 } from "./highlight.ts";
+import { createCursorLayer, trackPointer } from "./cursors.ts";
+import { CHORD_KEYS } from "../src/lib/esc-chord.ts";
 import {
   reduceVimScroll,
   VIM_GLIDE_PX_PER_MS,
@@ -106,6 +108,7 @@ type Theme = "dark" | "light";
 (function bridge(): void {
   const appOrigin = window.__SLASHDOCS_APP_ORIGIN__ || "*";
   const frame = document.getElementById("slashdocs-doc") as HTMLIFrameElement;
+  const cursors = createCursorLayer(doc);
   let kvRequestID = 0;
   const kvPending: Record<string, KVPendingRequest> = {};
   let githubRequestID = 0;
@@ -1724,7 +1727,7 @@ type Theme = "dark" | "light";
       if (selTimer) clearTimeout(selTimer);
       selTimer = setTimeout(selection, 350);
     });
-    const chordKeys = ["t", "f", "c", "h"];
+    const chordKeys: string[] = CHORD_KEYS.map((item) => item.key);
     let chordArmedAt = 0;
     let vimGArmed = false;
     let vimGTimer = 0;
@@ -1873,6 +1876,11 @@ type Theme = "dark" | "light";
     d.defaultView?.addEventListener("resize", scheduleCommentPositions);
     // Capture scrolls of nested containers too, not only the window.
     d.addEventListener("scroll", scheduleViewport, { capture: true, passive: true });
+    d.addEventListener("scroll", cursors.refresh, { capture: true, passive: true });
+    d.defaultView?.addEventListener("resize", cursors.refresh);
+    trackPointer(d, (spot) =>
+      parent.postMessage({ type: "slashdocs:pointer", spot }, targetOrigin()),
+    );
     parent.postMessage({ type: "slashdocs:ready" }, targetOrigin());
     scheduleViewport();
     hydrateKV();
@@ -1982,6 +1990,12 @@ type Theme = "dark" | "light";
       );
     } else if (e.data.type === "slashdocs:kv-event") {
       emitKVChange(e.data.detail || {});
+    } else if (e.data.type === "slashdocs:cursor") {
+      cursors.receive(e.data.cursor);
+    } else if (e.data.type === "slashdocs:clear-cursors") {
+      cursors.clear();
+    } else if (e.data.type === "slashdocs:follow-cursor") {
+      cursors.follow(String(e.data.session || ""));
     }
   });
 })();

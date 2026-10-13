@@ -268,9 +268,9 @@ describe("Google directory and D1 grant parity", () => {
       ).results,
     ).toHaveLength(0);
   });
-  it("lets inherited commenters mutate document grants including self-revocation with revision CAS", async () => {
+  it("lets inherited editors mutate document grants including self-revocation with revision CAS", async () => {
     const f = await fixture();
-    await addFolderGrant(f, "user", "member", "commenter");
+    await addFolderGrant(f, "user", "member", "editor");
     f.setActor(f.member);
     const created = await f.app.request(
       "/v1/documents/doc/grants",
@@ -317,7 +317,7 @@ describe("Google directory and D1 grant parity", () => {
     f.setActor(f.member);
     const self = await f.app.request(
       "/v1/documents/doc/grants",
-      json({ principal: { type: "user", id: "member" }, role: "commenter" }),
+      json({ principal: { type: "user", id: "member" }, role: "editor" }),
       f.env,
     );
     const selfBody = z.object({ id: z.string() }).parse(await self.json());
@@ -340,6 +340,27 @@ describe("Google directory and D1 grant parity", () => {
         ).first<{ access_revision: number }>()
       )?.access_revision,
     ).toBe(6);
+  });
+  it("denies inherited commenters grant mutations", async () => {
+    const f = await fixture();
+    await addFolderGrant(f, "user", "member", "commenter");
+    const created = await f.app.request(
+      "/v1/documents/doc/grants",
+      json({ principal: { type: "user", id: "member" }, role: "viewer" }),
+      f.env,
+    );
+    expect(created.status).toBe(201);
+    const grant = z.object({ id: z.string() }).parse(await created.json());
+    f.setActor(f.member);
+    for (const [path, input] of [
+      ["/v1/documents/doc/grants", json({ address: "build@nice.bot", role: "editor" })],
+      [
+        `/v1/documents/doc/grants/${grant.id}`,
+        { ...json({ role: "editor" }), method: "PATCH" },
+      ],
+      [`/v1/documents/doc/grants/${grant.id}`, { method: "DELETE" }],
+    ] as const)
+      expect((await f.app.request(path, input, f.env)).status).toBe(403);
   });
   it("maps disabled groups and dependency failures separately", async () => {
     const f = await fixture();

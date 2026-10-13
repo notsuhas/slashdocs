@@ -9,7 +9,12 @@ import { errorMessage } from "@/lib/errors";
 // Message origins are checked on both ends.
 export function useBridgeHost(docId: string, renderURL: string | undefined) {
   const ref = useRef<HTMLIFrameElement>(null);
-  const [ready, setReady] = useState(false);
+  // The frame is ready only for the URL it loaded. A new URL is not ready
+  // from the first render that uses it.
+  const [readyURL, setReadyURL] = useState<string>();
+  const ready = !!renderURL && readyURL === renderURL;
+  const renderURLRef = useRef(renderURL);
+  renderURLRef.current = renderURL;
   const theme = useResolvedTheme();
   // Stable handlers read the latest theme and readiness from refs. Handlers
   // that re-register can miss a slashdocs:ready sent during the teardown.
@@ -35,10 +40,6 @@ export function useBridgeHost(docId: string, renderURL: string | undefined) {
     if (!renderURL) return undefined;
     const sep = renderURL.includes("?") ? "&" : "?";
     return `${renderURL}${sep}slashdocs_theme=${themeRef.current}`;
-  }, [renderURL]);
-
-  useEffect(() => {
-    setReady(false);
   }, [renderURL]);
 
   useEffect(() => {
@@ -85,7 +86,7 @@ export function useBridgeHost(docId: string, renderURL: string | undefined) {
       };
       const data = e.data as Record<string, unknown> | null;
       if (data?.type === "slashdocs:ready") {
-        setReady(true);
+        setReadyURL(renderURLRef.current);
         reply({ type: "slashdocs:theme", theme: themeRef.current });
       }
       if (data?.type === "slashdocs:kv-request") {

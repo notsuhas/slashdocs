@@ -99,6 +99,7 @@ for (const path of [
   secured.on(["GET", "PUT"], path, activityLimit);
 secured.post("/v1/documents/:id/access-requests", activityLimit);
 secured.post("/v1/documents/:id/presence", activityRateLimit());
+secured.post("/v1/documents/:id/cursor", activityRateLimit(Date.now, 1200));
 secured.route("/", adminRoutes);
 secured.route("/", documentRoutes);
 secured.route("/", versionRoutes);

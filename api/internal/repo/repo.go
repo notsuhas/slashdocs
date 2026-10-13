@@ -320,11 +320,13 @@ type DocumentKVPatchResult struct {
 
 // Kinds of events in a document's live event log. KV changes carry Changes;
 // the other kinds share the KV revision sequence and carry optional Data.
+// Cursor events are relayed but never stored, so they carry no revision.
 const (
 	DocumentEventKV       = "kv"
 	DocumentEventDocument = "document"
 	DocumentEventComments = "comments"
 	DocumentEventPresence = "presence"
+	DocumentEventCursor   = "cursor"
 )
 
 type DocumentKVEvent struct {

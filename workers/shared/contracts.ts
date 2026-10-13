@@ -181,7 +181,7 @@ export type DocumentKVEvent = {
   updated_at?: string;
   updated_by?: Principal;
   // Stream events other than KV changes set kind; presence events carry data.
-  kind?: "kv" | "document" | "comments" | "presence";
+  kind?: "kv" | "document" | "comments" | "presence" | "cursor";
   data?: unknown;
 };
 // A viewer's place in a document, published on the document event stream.

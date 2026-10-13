@@ -148,14 +148,14 @@ async function grantDTO(env: Env, grant: FolderGrantRow) {
 folderRoutes.post("/v1/folders/:id/grants", async (c) => {
   const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireFolder(c.env, actor, id, "commenter");
+  await requireFolder(c.env, actor, id, "editor");
   const input = grantInput.parse(await c.req.json());
   const resolved = await resolveGrantPrincipal(c.env, input);
   const type = resolved.type,
     principalId = resolved.id;
   const grantId = newId("grt");
   const result = await c.env.DB.prepare(
-    `INSERT INTO folder_grants(id,folder_id,principal_type,principal_id,role,granted_by_type,granted_by_id) SELECT COALESCE((SELECT grant_id FROM grant_identities WHERE resource_type='folder' AND resource_id=f.id AND principal_type=? AND principal_id=?),?),f.id,?,?,?,?,? FROM folders f CROSS JOIN (SELECT ? AS actor_id) caller WHERE f.id=? AND ${folderRoleRankSQL("f.id", "caller.actor_id", true, c.env)}>=2 ON CONFLICT(folder_id,principal_type,principal_id) DO UPDATE SET role=excluded.role,granted_by_type=excluded.granted_by_type,granted_by_id=excluded.granted_by_id`,
+    `INSERT INTO folder_grants(id,folder_id,principal_type,principal_id,role,granted_by_type,granted_by_id) SELECT COALESCE((SELECT grant_id FROM grant_identities WHERE resource_type='folder' AND resource_id=f.id AND principal_type=? AND principal_id=?),?),f.id,?,?,?,?,? FROM folders f CROSS JOIN (SELECT ? AS actor_id) caller WHERE f.id=? AND ${folderRoleRankSQL("f.id", "caller.actor_id", true, c.env)}>=3 ON CONFLICT(folder_id,principal_type,principal_id) DO UPDATE SET role=excluded.role,granted_by_type=excluded.granted_by_type,granted_by_id=excluded.granted_by_id`,
   )
     .bind(
       type,
@@ -171,24 +171,24 @@ folderRoutes.post("/v1/folders/:id/grants", async (c) => {
     )
     .run();
   if (!result.meta.changes)
-    throw new ApiError(403, "forbidden", "commenter role required");
+    throw new ApiError(403, "forbidden", "editor role required");
   const grant = await c.env.DB.prepare(
     "SELECT * FROM folder_grants WHERE folder_id=? AND principal_type=? AND principal_id=?",
   )
     .bind(id, type, principalId)
     .first<FolderGrantRow>();
-  if (!grant) throw new ApiError(403, "forbidden", "commenter role required");
+  if (!grant) throw new ApiError(403, "forbidden", "editor role required");
   return c.json(await grantDTO(c.env, grant), 201);
 });
 folderRoutes.patch("/v1/folders/:id/grants/:grant_id", async (c) => {
   const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireFolder(c.env, actor, id, "commenter");
+  await requireFolder(c.env, actor, id, "editor");
   const input = z
     .object({ role: z.enum(["viewer", "commenter", "editor"]) })
     .parse(await c.req.json());
   const result = await c.env.DB.prepare(
-    `UPDATE folder_grants SET role=? WHERE id=? AND folder_id=? AND ${folderRoleRankSQL("folder_grants.folder_id", "?", true, c.env)}>=2`,
+    `UPDATE folder_grants SET role=? WHERE id=? AND folder_id=? AND ${folderRoleRankSQL("folder_grants.folder_id", "?", true, c.env)}>=3`,
   )
     .bind(
       input.role,
@@ -210,9 +210,9 @@ folderRoutes.patch("/v1/folders/:id/grants/:grant_id", async (c) => {
 folderRoutes.delete("/v1/folders/:id/grants/:grant_id", async (c) => {
   const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireFolder(c.env, actor, id, "commenter");
+  await requireFolder(c.env, actor, id, "editor");
   const result = await c.env.DB.prepare(
-    `DELETE FROM folder_grants WHERE id=? AND folder_id=? AND ${folderRoleRankSQL("folder_grants.folder_id", "?", true, c.env)}>=2`,
+    `DELETE FROM folder_grants WHERE id=? AND folder_id=? AND ${folderRoleRankSQL("folder_grants.folder_id", "?", true, c.env)}>=3`,
   )
     .bind(c.req.param("grant_id"), id, actor.principal.id, actor.principal.id)
     .run();

@@ -561,6 +561,11 @@ events. Open viewers refresh comments, hear about new versions, and see who
 else is viewing, whichever replica served each request. Presence rows expire
 after ten minutes, so the event table does not grow with viewing time.
 
+Live cursors use the same stream but are never stored. In `notify` mode, each
+batch of pointer positions goes to every replica as a notification. In `poll`
+mode, a viewer sees only the cursors of viewers that the same replica serves.
+Thus, use `notify` when you run more than one replica.
+
 `notify` fails startup if LISTEN cannot be verified. It prefers the listener URL
 and otherwise uses `DATABASE_URL`, which is an explicit assertion by the
 operator that the connection preserves session state. `poll` never opens a

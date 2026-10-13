@@ -130,7 +130,7 @@ export function AdminPage() {
               [
                 "API operations in 30 days",
                 number(data.daily.reduce((sum, day) => sum + day.requests, 0)),
-                "REST requests and API operations dispatched by MCP tools in the last 30 UTC calendar days. Excludes dashboard, presence, event streams, and rate-limit rejections.",
+                "REST requests and API operations dispatched by MCP tools in the last 30 UTC calendar days. Excludes dashboard, presence, cursors, event streams, and rate-limit rejections.",
               ],
             ].map(([title, value, description]) => (
               <Card key={title} className="p-5">

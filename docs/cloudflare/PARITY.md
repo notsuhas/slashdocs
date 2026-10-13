@@ -1,6 +1,6 @@
 # Parity acceptance
 
-The reference is the Go server, React reader and CLI at upstream commit `6ccc967e6f5eab522ba60a1ab64da7f3dcccc614`, the fork's current source baseline. Full parity means matching its observable behavior and configurable integrations. It does not mean returning successful placeholders, hiding unsupported controls, or replacing writes with local browser state.
+The reference is the Go server, React reader and CLI at upstream commit `d615247cbaab54817f26692e0704d4e2e61e485f`, the fork's current source baseline. Full parity means matching its observable behavior and configurable integrations. It does not mean returning successful placeholders, hiding unsupported controls, or replacing writes with local browser state.
 
 ## Required checks
 
@@ -14,17 +14,17 @@ The reference is the Go server, React reader and CLI at upstream commit `6ccc967
 
 ## Work ledger
 
-| Area                                                          | Implementation | Independent review                                                  | Runtime/contract proof                                                                      |
-| ------------------------------------------------------------- | -------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Folders, inherited sharing, moves, pins and featured          | Implemented    | Sharing rounds 1–3 resolved; restored grant IDs reviewed            | Real D1 concurrency, Unicode, revocation and query-budget tests                             |
-| KV mutations, undo/redo, SSE and presence                     | Implemented    | Heartbeat, fanout and replay fixes independently reviewed           | Actual workerd replay, 32-event overflow, 64-principal fanout, disconnect cleanup           |
-| Generic OIDC, service accounts, keys and ownership transfers  | Implemented    | Identity review clean; configured-provider alias regression covered | Real D1 claim/transfer races and signed OIDC fixtures                                       |
-| MCP tools and OAuth consent/PKCE                              | Implemented    | Auth/transport reviewed                                             | All 49 exact upstream tools exercised through actual workerd                                |
-| Search operators/dates/full text and labels                   | Implemented    | Search runtime and metadata fixes independently reviewed            | Go grammar fixtures, PostgreSQL 18 golden rank/snippet cases, SQLite DO execution           |
-| Structured mentions, headings and deep links                  | Implemented    | Metadata review fixes resolved                                      | Real D1/R2 Unicode, publication, placement and notification tests                           |
-| Notification preferences, access requests and Slack delivery  | Implemented    | Earliest-alarm and concurrent-wake fixes independently reviewed     | Real D1/DO queue, coalescing, retries, current access and continuous-wake tests             |
-| GitHub connection/raw content/author access and Google Groups | Implemented    | Runtime/sharing reviews resolved                                    | Provider HTTP boundary mocks, signed JWT, customer-change and stale-write tests             |
-| Frontend, deployment configuration and shared contracts       | Implemented    | Deployment/containment fixes independently reviewed                 | Go CLI create/pull/push, browser rendering/live comments/Swagger, HTTP/MCP inventory guards |
+| Area                                                          | Implementation | Independent review                                                  | Runtime/contract proof                                                                               |
+| ------------------------------------------------------------- | -------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Folders, inherited sharing, moves, pins and featured          | Implemented    | Sharing rounds 1–3 resolved; restored grant IDs reviewed            | Real D1 concurrency, Unicode, revocation and query-budget tests                                      |
+| KV mutations, undo/redo, SSE, presence and cursors            | Implemented    | Heartbeat, fanout and replay fixes independently reviewed           | Actual workerd replay, ephemeral cursors, 32-event overflow, 64-principal fanout, disconnect cleanup |
+| Generic OIDC, service accounts, keys and ownership transfers  | Implemented    | Identity review clean; configured-provider alias regression covered | Real D1 claim/transfer races and signed OIDC fixtures                                                |
+| MCP tools and OAuth consent/PKCE                              | Implemented    | Auth/transport reviewed                                             | All 49 exact upstream tools exercised through actual workerd                                         |
+| Search operators/dates/full text and labels                   | Implemented    | Search runtime and metadata fixes independently reviewed            | Go grammar fixtures, PostgreSQL 18 golden rank/snippet cases, SQLite DO execution                    |
+| Structured mentions, headings and deep links                  | Implemented    | Metadata review fixes resolved                                      | Real D1/R2 Unicode, publication, placement and notification tests                                    |
+| Notification preferences, access requests and Slack delivery  | Implemented    | Earliest-alarm and concurrent-wake fixes independently reviewed     | Real D1/DO queue, coalescing, retries, current access and continuous-wake tests                      |
+| GitHub connection/raw content/author access and Google Groups | Implemented    | Runtime/sharing reviews resolved                                    | Provider HTTP boundary mocks, signed JWT, customer-change and stale-write tests                      |
+| Frontend, deployment configuration and shared contracts       | Implemented    | Deployment/containment fixes independently reviewed                 | Go CLI create/pull/push, browser rendering/live comments/Swagger, HTTP/MCP inventory guards          |
 
 This ledger records behavior against the pinned source baseline, not a promise of byte-identical PostgreSQL internals. See [metadata contract](parity-metadata-contract.md) for specialized lexer, dictionary, locale and malformed-HTML differences that remain outside the golden fixture coverage. Existing Go-issued MCP credentials require new Cloudflare registration. External OIDC, GitHub, Google Groups and Slack integrations require provider configuration.
 

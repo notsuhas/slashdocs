@@ -254,6 +254,8 @@ func TestAdminExcludesPresenceAndEventStreams(t *testing.T) {
 	headers := map[string]string{"X-Test-Principal": principalHeader(fixtureOwner), "Content-Type": "application/json"}
 	r := do(t, e.h, http.MethodPost, "/v1/documents/"+e.doc.ID+"/presence", `{"session":"admin-presence","version":"`+e.ver.ID+`"}`, headers)
 	assertStatus(t, r, http.StatusNoContent)
+	r = do(t, e.h, http.MethodPost, "/v1/documents/"+e.doc.ID+"/cursor", `{"session":"admin-cursor","version":"`+e.ver.ID+`","points":[{"t":1,"path":"0","x":0.2,"y":0.4}]}`, headers)
+	assertStatus(t, r, http.StatusNoContent)
 	r = do(t, e.h, http.MethodGet, "/v1/documents/"+e.doc.ID+"/kv/events?session=bad!", "", headers)
 	assertStatus(t, r, http.StatusBadRequest)
 	stats, err := e.store.AdminStats(context.Background(), "")

@@ -4,7 +4,7 @@ import type { AppEnv, Env, Role } from "../env";
 import type { Principal } from "../../../shared/contracts";
 import { newId } from "../../../shared/ids";
 import { ApiError } from "../../../shared/errors";
-import { requireDocument, commenterPredicateFor } from "../services/permissions";
+import { requireDocument, editorPredicateFor } from "../services/permissions";
 import { effectiveAccess } from "../services/folders";
 import {
   canonicalGrantPrincipal,
@@ -64,7 +64,7 @@ grantRoutes.get("/v1/documents/:id/access", async (c) => {
 grantRoutes.post("/v1/documents/:id/grants", async (c) => {
   const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireDocument(c.env, actor, id, "commenter");
+  await requireDocument(c.env, actor, id, "editor");
   const input = grantInputSchema.parse(await c.req.json()),
     principal = await resolveGrantPrincipal(c.env, input);
   const token = newId("nmt");
@@ -73,7 +73,7 @@ grantRoutes.post("/v1/documents/:id/grants", async (c) => {
   const result = await c.env.DB.batch([
     ...snapshots,
     c.env.DB.prepare(
-      `INSERT INTO document_grants(id,document_id,principal_type,principal_id,role,granted_by_user_id) SELECT COALESCE((SELECT grant_id FROM grant_identities WHERE resource_type='document' AND resource_id=d.id AND principal_type=? AND principal_id=?),?),d.id,?,?,?,? FROM documents d WHERE d.id=? AND d.deleted_at IS NULL AND ${commenterPredicateFor(c.env)} ON CONFLICT(document_id,principal_type,principal_id) DO UPDATE SET role=excluded.role,granted_by_user_id=excluded.granted_by_user_id`,
+      `INSERT INTO document_grants(id,document_id,principal_type,principal_id,role,granted_by_user_id) SELECT COALESCE((SELECT grant_id FROM grant_identities WHERE resource_type='document' AND resource_id=d.id AND principal_type=? AND principal_id=?),?),d.id,?,?,?,? FROM documents d WHERE d.id=? AND d.deleted_at IS NULL AND ${editorPredicateFor(c.env)} ON CONFLICT(document_id,principal_type,principal_id) DO UPDATE SET role=excluded.role,granted_by_user_id=excluded.granted_by_user_id`,
     ).bind(
       principal.type,
       principal.id,
@@ -94,7 +94,7 @@ grantRoutes.post("/v1/documents/:id/grants", async (c) => {
     ...clearNotificationMutation(c.env, token),
   ]);
   if (!result[casIndex].meta.changes)
-    throw new ApiError(403, "forbidden", "commenter role required");
+    throw new ApiError(403, "forbidden", "editor role required");
   await wakeGrantNotifications(c.env);
   const grant = await c.env.DB.prepare(
     "SELECT * FROM document_grants WHERE document_id=? AND principal_type=? AND principal_id=?",
@@ -116,7 +116,7 @@ grantRoutes.post("/v1/documents/:id/grants", async (c) => {
 grantRoutes.patch("/v1/documents/:id/grants/:grant_id", async (c) => {
   const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireDocument(c.env, actor, id, "commenter");
+  await requireDocument(c.env, actor, id, "editor");
   const input = z
     .object({ role: z.enum(["viewer", "commenter", "editor"]) })
     .parse(await c.req.json());
@@ -137,7 +137,7 @@ grantRoutes.patch("/v1/documents/:id/grants/:grant_id", async (c) => {
   const result = await c.env.DB.batch([
     ...snapshots,
     c.env.DB.prepare(
-      `UPDATE document_grants SET role=? WHERE id=? AND document_id=? AND EXISTS(SELECT 1 FROM documents d WHERE d.id=document_grants.document_id AND d.deleted_at IS NULL AND ${commenterPredicateFor(c.env)})`,
+      `UPDATE document_grants SET role=? WHERE id=? AND document_id=? AND EXISTS(SELECT 1 FROM documents d WHERE d.id=document_grants.document_id AND d.deleted_at IS NULL AND ${editorPredicateFor(c.env)})`,
     ).bind(
       input.role,
       c.req.param("grant_id"),
@@ -166,7 +166,7 @@ grantRoutes.patch("/v1/documents/:id/grants/:grant_id", async (c) => {
 grantRoutes.delete("/v1/documents/:id/grants/:grant_id", async (c) => {
   const id = c.req.param("id"),
     actor = c.get("actor");
-  await requireDocument(c.env, actor, id, "commenter");
+  await requireDocument(c.env, actor, id, "editor");
   const storedGrant = await c.env.DB.prepare(
     "SELECT * FROM document_grants WHERE id=? AND document_id=?",
   )
@@ -184,7 +184,7 @@ grantRoutes.delete("/v1/documents/:id/grants/:grant_id", async (c) => {
   const result = await c.env.DB.batch([
     ...snapshots,
     c.env.DB.prepare(
-      `DELETE FROM document_grants WHERE id=? AND document_id=? AND EXISTS(SELECT 1 FROM documents d WHERE d.id=document_grants.document_id AND d.deleted_at IS NULL AND ${commenterPredicateFor(c.env)})`,
+      `DELETE FROM document_grants WHERE id=? AND document_id=? AND EXISTS(SELECT 1 FROM documents d WHERE d.id=document_grants.document_id AND d.deleted_at IS NULL AND ${editorPredicateFor(c.env)})`,
     ).bind(c.req.param("grant_id"), id, actor.principal.id, actor.principal.id),
     captureNotificationMutation(c.env, token),
     c.env.DB.prepare(

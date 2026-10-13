@@ -155,6 +155,7 @@ function countAdminOperation(path: string, status: number): boolean {
     status !== 429 &&
     path !== "/v1/*" &&
     !path.startsWith("/v1/admin/") &&
+    path !== "/v1/documents/:id/cursor" &&
     path !== "/v1/documents/:id/presence" &&
     path !== "/v1/documents/:id/kv/events"
   );

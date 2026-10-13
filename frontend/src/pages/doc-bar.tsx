@@ -15,6 +15,8 @@ import {
   GitBranch,
   Keyboard,
   MoreHorizontal,
+  MousePointer2,
+  MousePointer2Off,
   PanelRightClose,
   PanelRightOpen,
   Share2,
@@ -50,7 +52,8 @@ import { canManageSharing, ROLE_RANK } from "@/lib/constants";
 import { changeSummaryLines } from "@/lib/change-summary";
 import { formatTimestamp } from "@/lib/format-date";
 import { queryKeys } from "@/lib/queryKeys";
-import { samePrincipal } from "@/lib/principals";
+import { cursorsShownStore } from "@/lib/live-cursors";
+import { principalColor, samePrincipal } from "@/lib/principals";
 import { ShareSheet } from "./doc-share-sheet";
 import { useDoc } from "./doc-context";
 import { UploadVersionItem } from "./doc-upload-version";
@@ -184,6 +187,7 @@ export function DocBar({
         )}
       </div>
       <Viewers viewers={viewers} versions={versions} onFollow={onFollowViewer} />
+      {viewers.length ? <CursorsToggle /> : null}
       {isViewingOlder ? (
         <Button
           variant="ghost"
@@ -343,7 +347,8 @@ export function DocBar({
   );
 }
 
-// Other people viewing the document. Clicking one shows what they see.
+// Other people viewing the document, in the colors of their cursors.
+// Clicking one goes to their cursor, or else to what they see.
 function Viewers({
   viewers,
   versions,
@@ -373,7 +378,10 @@ function Viewers({
               type="button"
               aria-label={`Go to where ${name} is viewing`}
               onClick={() => onFollow(viewer)}
-              className="relative rounded-full ring-2 ring-[var(--color-surface)] transition-transform duration-150 ease-out hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] motion-reduce:transition-none"
+              style={{
+                boxShadow: `0 0 0 2px ${principalColor(viewer.principal)}, 0 0 0 4px var(--color-surface)`,
+              }}
+              className="relative rounded-full transition-transform duration-150 ease-out hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] motion-reduce:transition-none"
             >
               <Avatar size={28} name={name} src={viewer.principal.picture_url} />
             </button>
@@ -392,6 +400,27 @@ function Viewers({
         </span>
       ) : null}
     </div>
+  );
+}
+
+function CursorsToggle() {
+  const shown = cursorsShownStore.useStore();
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => cursorsShownStore.write(!shown)}
+      aria-label={shown ? "Hide cursors" : "Show cursors"}
+      tooltip={shown ? "Hide cursors (Esc M)" : "Show cursors (Esc M)"}
+      aria-pressed={shown}
+      className="hidden shrink-0 sm:inline-flex"
+    >
+      {shown ? (
+        <MousePointer2 className="h-4 w-4" />
+      ) : (
+        <MousePointer2Off className="h-4 w-4" />
+      )}
+    </Button>
   );
 }
 

@@ -29,6 +29,7 @@ import { useIsMobile } from "@/lib/use-media-query";
 import { useTheme } from "@/lib/theme";
 import { useEscChord } from "@/lib/use-esc-chord";
 import { createPersistentStore } from "@/lib/persistent-store";
+import { cursorsShownStore } from "@/lib/live-cursors";
 import { isChordBlocked, type ChordKey } from "@/lib/esc-chord";
 import {
   DocProvider,
@@ -434,14 +435,24 @@ export function DocumentPage() {
     });
   }, [latest, current]);
 
-  // Show the version another viewer reads, at the passage they look at.
+  // Show the version another viewer reads, at their cursor, or else at the
+  // passage they look at.
+  const cursorsShown = cursorsShownStore.useStore();
+  const [followedCursor, setFollowedCursor] = useState<{ session: string }>();
+  const { cursorVersion } = stream;
   const followViewer = useCallback(
     (viewer: Viewer) => {
+      const version = cursorsShown && cursorVersion(viewer.session);
+      if (version) {
+        setSelectedVersion(version);
+        setFollowedCursor({ session: viewer.session });
+        return;
+      }
       if (viewer.version) setSelectedVersion(viewer.version);
       const hash = textLinkFragment(viewer.anchor);
       if (hash) nav({ search: location.search, hash }, { replace: true });
     },
-    [nav, location.search],
+    [cursorsShown, cursorVersion, nav, location.search],
   );
 
   const exitFullscreen = useCallback(() => {
@@ -477,7 +488,7 @@ export function DocumentPage() {
   }, [fullscreen]);
 
   const chordKeys = useMemo<ChordKey[]>(
-    () => (fullscreen ? ["t", "f", "h"] : ["t", "f", "c", "h"]),
+    () => (fullscreen ? ["t", "f", "m", "h"] : ["t", "f", "c", "m", "h"]),
     [fullscreen],
   );
   const runChord = useCallback(
@@ -503,6 +514,11 @@ export function DocumentPage() {
         toggleComments();
         return;
       }
+      if (key === "m") {
+        setChordLabel(cursorsShown ? "Cursors hidden" : "Cursors shown");
+        cursorsShownStore.write(!cursorsShown);
+        return;
+      }
       setChordLabel("Documents");
       nav("/app/documents");
     },
@@ -515,6 +531,7 @@ export function DocumentPage() {
       mobilePanelOpen,
       commentsOpen,
       toggleComments,
+      cursorsShown,
       nav,
     ],
   );
@@ -569,6 +586,9 @@ export function DocumentPage() {
       handleRenderedDocumentClick,
       subscribeDocumentKV: stream.subscribeKV,
       reportViewport: stream.reportViewport,
+      moveCursor: stream.moveCursor,
+      subscribeCursors: stream.subscribeCursors,
+      followedCursor,
     }),
     [
       id,
@@ -597,6 +617,9 @@ export function DocumentPage() {
       handleRenderedDocumentClick,
       stream.subscribeKV,
       stream.reportViewport,
+      stream.moveCursor,
+      stream.subscribeCursors,
+      followedCursor,
     ],
   );
 

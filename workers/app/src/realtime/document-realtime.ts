@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { Hono } from "hono";
 import type { Actor, AppEnv, Env } from "../env";
 import type { DocumentKVEvent, DocumentPresence } from "../../../shared/contracts";
@@ -7,6 +8,28 @@ import { realtimeAuthorization, requireDocument } from "../services/permissions"
 import { refreshActorGroups } from "../services/groups";
 import { appendEvent, patchState, snapshot } from "../services/state";
 const encoder = new TextEncoder();
+const cursorInput = z.object({
+  session: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+  version: z
+    .string()
+    .default("")
+    .refine((value) => encoder.encode(value).length <= 64),
+  points: z
+    .array(
+      z.object({
+        t: z.number().int().nonnegative(),
+        path: z
+          .string()
+          .regex(/^(\d{1,5}(\.\d{1,5}){0,63})?$/)
+          .default(""),
+        x: z.number().min(0).max(1).default(0),
+        y: z.number().min(0).max(1).default(0),
+        hidden: z.boolean().optional(),
+      }),
+    )
+    .min(1)
+    .max(16),
+});
 export function eventFrame(event: DocumentKVEvent, withID = true) {
   return `${withID ? `id: ${event.revision}\n` : ""}${event.kind && event.kind !== "kv" ? `event: ${event.kind}\n` : ""}data: ${JSON.stringify(event)}\n\n`;
 }
@@ -104,7 +127,7 @@ export class DocumentRealtime {
         return new Response(null, { status: 204 });
       }
       const actor = await authenticate(this.env, request);
-      const match = /\/v1\/documents\/([^/]+)\/(kv(?:\/events)?|presence)$/.exec(
+      const match = /\/v1\/documents\/([^/]+)\/(kv(?:\/events)?|presence|cursor)$/.exec(
         new URL(request.url).pathname,
       );
       if (!match) return new Response(null, { status: 404 });
@@ -128,6 +151,35 @@ export class DocumentRealtime {
           if (event) await this.publish(event);
           return Response.json(result);
         });
+      }
+      if (match[2] === "cursor" && request.method === "POST") {
+        await requireDocument(this.env, actor, id, "viewer");
+        const body = await request.text();
+        if (encoder.encode(body).length > 4096)
+          throw new ApiError(400, "bad_request", "invalid cursor");
+        let input: unknown;
+        try {
+          input = JSON.parse(body);
+        } catch {
+          throw new ApiError(400, "bad_request", "invalid cursor");
+        }
+        const parsed = cursorInput.safeParse(input);
+        if (!parsed.success) throw new ApiError(400, "bad_request", "invalid cursor");
+        await this.serial(() =>
+          this.relayCursor(
+            {
+              document_id: id,
+              revision: 0,
+              changes: [],
+              kind: "cursor",
+              updated_at: new Date().toISOString(),
+              updated_by: actor.principal,
+              data: parsed.data,
+            },
+            parsed.data.session,
+          ),
+        );
+        return new Response(null, { status: 204 });
       }
       if (match[2] === "presence" && request.method === "POST") {
         await requireDocument(this.env, actor, id, "viewer");
@@ -316,6 +368,32 @@ export class DocumentRealtime {
     }
     if (leaves.length) await this.recordLeaves(leaves);
   }
+  private async relayCursor(event: DocumentKVEvent, session: string) {
+    const subscribers = [...this.subscribers].filter(
+      (sub) => sub.id === event.document_id,
+    );
+    const statuses = await realtimeAuthorization(
+      this.env,
+      subscribers.map((sub) => sub.actor),
+      event.document_id,
+    );
+    const leaves: ReturnType<DocumentRealtime["subscription"]>[] = [];
+    for (const [index, sub] of subscribers.entries()) {
+      if (statuses[index] === "denied") {
+        await this.close(sub, leaves);
+        continue;
+      }
+      if (statuses[index] !== "authorized") {
+        this.refreshGroups(sub);
+        continue;
+      }
+      if (!sub.cursors.has(session) && sub.cursors.size >= 32) continue;
+      sub.cursors.set(session, event);
+      if (sub.phase === "live") await this.pump(sub, true);
+      else this.resume(sub);
+    }
+    if (leaves.length) await this.recordLeaves(leaves);
+  }
   private fresh(event: DocumentKVEvent) {
     return (
       event.kind !== "presence" ||
@@ -411,7 +489,14 @@ export class DocumentRealtime {
         }
         while (sub.live.length && sub.live[0].revision <= sub.last) sub.live.shift();
         const next = sub.live[0];
-        if (!next) return;
+        if (!next) {
+          const cursor = sub.cursors.entries().next().value;
+          if (cursor) {
+            sub.cursors.delete(cursor[0]);
+            this.send(sub, eventFrame(cursor[1], false));
+          }
+          return;
+        }
         if (next.revision > sub.last + 1) {
           sub.gapThrough = next.revision - 1;
           continue;
@@ -471,6 +556,7 @@ export class DocumentRealtime {
     if (!this.subscribers.delete(sub)) return;
     clearInterval(sub.timer);
     sub.live.length = 0;
+    sub.cursors.clear();
     sub.page.length = 0;
     try {
       sub.controller.close();
@@ -510,6 +596,7 @@ export class DocumentRealtime {
       phase: "replay" as "replay" | "presence" | "connected" | "live",
       presenceLast: 0,
       live: [] as DocumentKVEvent[],
+      cursors: new Map<string, DocumentKVEvent>(),
       page: [] as string[],
       pageEnd: undefined as number | undefined,
       gapThrough: undefined as number | undefined,

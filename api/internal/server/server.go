@@ -226,6 +226,10 @@ func (unavailableDocumentKVEvents) Subscribe(context.Context, string) (<-chan re
 	return nil, func() {}, errors.New("repository does not support document KV event streaming")
 }
 
+func (unavailableDocumentKVEvents) Relay(context.Context, repo.DocumentKVEvent) error {
+	return errors.New("repository does not support document KV event streaming")
+}
+
 func (s *Server) Handler() http.Handler { return s.engine }
 
 func (s *Server) routes(deps dependencies) {
@@ -268,9 +272,10 @@ func (s *Server) routes(deps dependencies) {
 
 	// Every route below requires authentication.
 	authed := v1.Group("", requireAuth(deps.authenticator, deps.appOrigin, deps.googleGroupResolver))
-	activityLimit := activityRateLimit()
-	// A separate budget: presence heartbeats must not starve other activity.
-	presenceLimit := activityRateLimit()
+	activityLimit := activityRateLimit(60)
+	// Cursor traffic has a separate budget from other activity.
+	presenceLimit := activityRateLimit(60)
+	cursorLimit := activityRateLimit(1200)
 	authed.Use(h.observeActivity)
 	authed.GET("/admin/stats", h.adminStats)
 	authed.GET("/me", h.me)
@@ -318,6 +323,7 @@ func (s *Server) routes(deps dependencies) {
 	authed.GET("/documents/:id/kv", h.listDocumentKV)
 	authed.GET("/documents/:id/kv/events", h.streamDocumentKVEvents)
 	authed.POST("/documents/:id/presence", presenceLimit, h.postDocumentPresence)
+	authed.POST("/documents/:id/cursor", cursorLimit, h.postDocumentCursor)
 	authed.PATCH("/documents/:id/kv", h.patchDocumentKV)
 	authed.POST("/documents/:id/comments/:comment_id/replies", h.createCommentReply)
 	authed.PATCH("/documents/:id/comments/:comment_id", h.patchComment)

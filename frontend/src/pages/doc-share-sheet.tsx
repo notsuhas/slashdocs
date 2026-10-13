@@ -357,7 +357,7 @@ export function ShareSheet({
                   </p>
                   <p className="mt-1 text-xs leading-5 text-[var(--color-fg-muted)]">
                     You can see who has access and copy the link, but you need at least
-                    commenter access to change sharing.
+                    editor access to change sharing.
                   </p>
                 </div>
               </div>

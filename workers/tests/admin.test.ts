@@ -190,6 +190,24 @@ it("counts a forwarded realtime KV request once and excludes heartbeats and stre
     runtime.env,
   );
   expect(presence.status).toBe(500);
+  const cursor = await app.request(
+    "https://app.example.com/v1/documents/doc_kv/cursor",
+    {
+      method: "POST",
+      headers: {
+        ...headers,
+        Origin: runtime.env.APP_ORIGIN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session: "cursor_session",
+        version: "v1",
+        points: [{ t: 1, path: "0", x: 0, y: 0 }],
+      }),
+    },
+    runtime.env,
+  );
+  expect(cursor.status).toBe(500);
   const stream = await app.request(
     "https://app.example.com/v1/documents/doc_kv/kv/events",
     { headers },

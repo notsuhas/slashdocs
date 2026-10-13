@@ -204,6 +204,55 @@ async function runtime(
   };
 }
 describe("document state and real Durable Object streams", () => {
+  it("relays cursors without storing them or advancing durable revisions", async () => {
+    const f = await runtime();
+    const reader = (await f.request("kv/events", {}, "viewer")).body!.getReader();
+    cleanup.unshift(() => reader.cancel());
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain(
+      ": connected",
+    );
+    const pending = reader.read();
+    const cursor = {
+      session: "cursor_session",
+      version: "version",
+      points: [{ t: 1, path: "0.1", x: 0.2, y: 0.4 }],
+    };
+    expect(
+      (await f.request("cursor", { method: "POST", body: JSON.stringify(cursor) }))
+        .status,
+    ).toBe(204);
+    const frame = new TextDecoder().decode((await pending).value);
+    expect(frame).toContain("event: cursor");
+    expect(frame).not.toContain("id:");
+    expect(frame).toContain('"id":"owner"');
+    expect(
+      await f.env.DB.prepare(
+        "SELECT count(*) AS n FROM document_events WHERE kind='cursor'",
+      ).first(),
+    ).toEqual({ n: 0 });
+    expect((await f.patch({ durable: true })).status).toBe(200);
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("id: 1");
+    for (const input of [
+      { ...cursor, points: [] },
+      { ...cursor, points: [{ t: -1, x: 2, y: 0, path: "bad" }] },
+      { ...cursor, session: "bad!" },
+    ])
+      expect(
+        (await f.request("cursor", { method: "POST", body: JSON.stringify(input) }))
+          .status,
+      ).toBe(400);
+    await f.env.DB.prepare("DELETE FROM document_grants WHERE id='grant'").run();
+    expect(
+      (
+        await f.request(
+          "cursor",
+          { method: "POST", body: JSON.stringify(cursor) },
+          "viewer",
+        )
+      ).status,
+    ).toBe(403);
+  });
+
   it("keeps more than 100 heartbeats within fresh D1 budgets and closes revoked or idle readers", async () => {
     const f = await runtime(50, false, true);
     const reader = (
