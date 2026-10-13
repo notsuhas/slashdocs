@@ -70,9 +70,24 @@ export class DocumentRealtime {
         const actor: Actor = await request.json();
         await refreshActorGroups(this.env, actor);
         await this.serial(async () => {
-          for (const sub of this.subscribers) {
-            if (sub.actor.principal.id === actor.principal.id) this.resume(sub);
+          const subscribers = [...this.subscribers].filter(
+            (sub) => sub.actor.principal.id === actor.principal.id,
+          );
+          if (!subscribers.length) return;
+          const statuses = await realtimeAuthorization(
+            this.env,
+            subscribers.map((sub) => sub.actor),
+            subscribers[0].id,
+          );
+          const leaves: ReturnType<DocumentRealtime["subscription"]>[] = [];
+          for (const [index, sub] of subscribers.entries()) {
+            if (statuses[index] === "authorized") this.resume(sub);
+            else if (statuses[index] === "denied") await this.close(sub, leaves);
+            // A failed directory refresh retains a stale snapshot. Resuming it
+            // would immediately schedule another refresh, even during cooldown.
+            // Leave pending readers paused until the next heartbeat retries.
           }
+          if (leaves.length) await this.recordLeaves(leaves);
         });
         return new Response(null, { status: 204 });
       }

@@ -10,12 +10,17 @@ const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const dispose of cleanup.splice(0)) await dispose();
 });
-async function runtime(ceiling = 0, groups = false, accelerated = false) {
+async function runtime(
+  ceiling = 0,
+  groups = false,
+  accelerated = false,
+  groupsUnavailable = false,
+) {
   const bundle = await build({
     stdin: {
       contents: `import { AsyncLocalStorage } from 'node:async_hooks'; import { DocumentRealtime as ProductionRealtime } from './workers/app/src/realtime/document-realtime.ts';
       export class DocumentRealtime extends ProductionRealtime {
-        pages=0; queries=0; maxQueries=0; ceilingFailures=0; heartbeatInvocations=0; inactivityCloses=0; failAuthorization=false; budget=new AsyncLocalStorage();
+        pages=0; queries=0; maxQueries=0; ceilingFailures=0; heartbeatInvocations=0; refreshInvocations=0; inactivityCloses=0; failAuthorization=false; budget=new AsyncLocalStorage();
         constructor(state,env){
           let self;
           const db=env.DB;
@@ -61,7 +66,8 @@ async function runtime(ceiling = 0, groups = false, accelerated = false) {
           if(path.endsWith('/age-demand')){for(const sub of this.subscribers)sub.lastDemandAt=Date.now()-45001;return new Response(null,{status:204})}
           if(path.endsWith('/fail-authorization')){this.failAuthorization=(await request.text())==='true';return new Response(null,{status:204})}
           if(path==='/heartbeat')this.heartbeatInvocations++;
-          if(path.endsWith('/debug'))return Response.json({queries:this.queries,maxQueries:this.maxQueries,ceilingFailures:this.ceilingFailures,heartbeatInvocations:this.heartbeatInvocations,inactivityCloses:this.inactivityCloses,pages:this.pages,subscribers:[...this.subscribers].map(s=>({live:s.live?.length,page:s.page?.length,last:s.last,phase:s.phase}))});
+          if(path==='/refresh-groups')this.refreshInvocations++;
+          if(path.endsWith('/debug'))return Response.json({queries:this.queries,maxQueries:this.maxQueries,ceilingFailures:this.ceilingFailures,heartbeatInvocations:this.heartbeatInvocations,refreshInvocations:this.refreshInvocations,inactivityCloses:this.inactivityCloses,pages:this.pages,subscribers:[...this.subscribers].map(s=>({live:s.live?.length,page:s.page?.length,last:s.last,phase:s.phase}))});
           const meter={queries:0};
           const response=await this.budget.run(meter,()=>super.fetch(request));
           this.queries=meter.queries;return response;
@@ -98,7 +104,10 @@ async function runtime(ceiling = 0, groups = false, accelerated = false) {
     d1Databases: ["DB"],
     serviceBindings: groups
       ? {
-          GOOGLE_GROUPS_FETCHER: async () => Response.json({ memberships: [] }),
+          GOOGLE_GROUPS_FETCHER: async () =>
+            groupsUnavailable
+              ? new Response(null, { status: 503 })
+              : Response.json({ memberships: [] }),
         }
       : {},
     durableObjects: {
@@ -183,7 +192,16 @@ async function runtime(ceiling = 0, groups = false, accelerated = false) {
       },
     };
   }
-  return { mf, env, request, patch, controlledReader };
+  return {
+    mf,
+    env,
+    request,
+    patch,
+    controlledReader,
+    setGroupsUnavailable(value: boolean) {
+      groupsUnavailable = value;
+    },
+  };
 }
 describe("document state and real Durable Object streams", () => {
   it("keeps more than 100 heartbeats within fresh D1 budgets and closes revoked or idle readers", async () => {
@@ -308,6 +326,58 @@ describe("document state and real Durable Object streams", () => {
       "SELECT user_id FROM google_group_memberships WHERE user_id='viewer'",
     ).first();
     expect(membership).toBeNull();
+  });
+  it("pauses failed group refreshes without a self-call loop and retries on a heartbeat", async () => {
+    const f = await runtime(50, true, false, true);
+    await f.env.DB.batch([
+      f.env.DB.prepare("DELETE FROM document_grants WHERE id='grant'"),
+      f.env.DB.prepare(
+        "INSERT INTO google_groups VALUES('groups/test','Ctest','team@example.com','Team',?)",
+      ).bind(Date.now()),
+      f.env.DB.prepare(
+        "INSERT INTO google_group_memberships VALUES('viewer','groups/test')",
+      ),
+      f.env.DB.prepare(
+        "INSERT INTO document_grants VALUES('group-grant','doc','google_group','groups/test','viewer','owner')",
+      ),
+    ]);
+    const reader = (await f.request("kv/events", {}, "viewer")).body!.getReader();
+    cleanup.unshift(() => reader.cancel());
+    await reader.read();
+    const pending = reader.read();
+    await f.env.DB.prepare(
+      "UPDATE google_group_membership_snapshots SET last_success_at=1 WHERE user_id='viewer'",
+    ).run();
+    const heartbeat = () =>
+      f.env
+        .DOCUMENT_REALTIME!.get(f.env.DOCUMENT_REALTIME!.idFromName("doc"))
+        .fetch("https://realtime/heartbeat", { method: "POST", body: "0" });
+    const debug = async () => (await f.request("debug")).json();
+    await heartbeat();
+    await expect.poll(debug).toMatchObject({ refreshInvocations: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(await debug()).toMatchObject({
+      refreshInvocations: 1,
+      ceilingFailures: 0,
+      subscribers: [{ last: 0, phase: "live" }],
+    });
+    // The directory cooldown also returns an unresolved snapshot; it must not
+    // restart a private refresh/pump cycle before the next heartbeat either.
+    await heartbeat();
+    await expect.poll(debug).toMatchObject({ refreshInvocations: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await debug()).toMatchObject({ refreshInvocations: 2 });
+    f.setGroupsUnavailable(false);
+    await f.env.DB.prepare(
+      "UPDATE google_group_membership_snapshots SET last_attempt_at=1 WHERE user_id='viewer'",
+    ).run();
+    await heartbeat();
+    expect((await pending).done).toBe(true);
+    expect(await debug()).toMatchObject({
+      refreshInvocations: 3,
+      ceilingFailures: 0,
+      subscribers: [],
+    });
   });
   it("continues expired presence replay through fresh bounded invocations", async () => {
     const f = await runtime(50);
