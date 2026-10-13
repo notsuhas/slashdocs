@@ -33,7 +33,7 @@ type AdminStatistics interface {
 type AdminObservations interface {
 	RecordActivity(context.Context, string, bool) error
 	ObserveSession(context.Context, auth.VerifiedSession) error
-	ForgetSession(context.Context, string) error
+	ForgetSession(context.Context, auth.VerifiedSession) error
 	FlushAdminActivity(context.Context) error
 	PruneAdminObservations(context.Context) error
 }

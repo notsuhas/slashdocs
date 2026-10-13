@@ -266,7 +266,9 @@ admin access requires `ADMIN_USERS`. Activity records are retained for 31 UTC ca
 days (enough for the rolling 30-day metric). Go cleans hourly; Workers cleans on
 the first API operation each UTC day and during configured scheduled maintenance.
 Enable Workers `cleanupCron` for hourly cleanup even when there is no API traffic.
-Expired sessions are removed during those cleanup runs.
+Expired sessions are removed during those cleanup runs. Go retains a hashed logout
+marker through the original session expiry so in-flight requests on other replicas
+cannot restore a logged-out session to the dashboard.
 Your configured login, storage, GitHub, group-directory, and notification integrations
 make their normal outbound requests.
 

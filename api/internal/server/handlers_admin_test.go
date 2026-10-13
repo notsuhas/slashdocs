@@ -3,12 +3,14 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/razorpay/slashdocs/api/internal/auth"
 	"github.com/razorpay/slashdocs/api/internal/repo"
+	pgrepo "github.com/razorpay/slashdocs/api/internal/repo/postgres"
 	"github.com/razorpay/slashdocs/api/internal/server"
 )
 
@@ -63,7 +65,7 @@ func TestAdminAuthorizationAndStats(t *testing.T) {
 	if stats.Versions != 2 || stats.StorageBytes != int64(len("<html><body>fixture</body></html>")+len("new html")) {
 		t.Fatalf("version sizes: %+v", stats)
 	}
-	if err := e.store.ForgetSession(ctx, "valid"); err != nil {
+	if err := e.store.ForgetSession(ctx, auth.VerifiedSession{TokenHash: "valid", UserID: fixtureOwner.ID, ExpiresAt: time.Now().Add(time.Hour).Unix(), SigningKeyID: (auth.SessionCodec{Secret: []byte(oauthTestSigningMaterial)}).SigningKeyID()}); err != nil {
 		t.Fatal(err)
 	}
 	stats, err = e.store.AdminStats(ctx, (auth.SessionCodec{Secret: []byte(oauthTestSigningMaterial)}).SigningKeyID())
@@ -113,7 +115,7 @@ func TestAdminRetentionAndInitialization(t *testing.T) {
 	if err != nil || stats.TrackingSince == nil || len(stats.Daily) != 0 {
 		t.Fatalf("initialization: %+v %v", stats, err)
 	}
-	if _, err := e.store.Pool().Exec(ctx, "INSERT INTO admin_activity VALUES('2000-01-01','old',true,5,'2000-01-01'); INSERT INTO admin_sessions VALUES('old','owner_1','2000-01-01','old-key')"); err != nil {
+	if _, err := e.store.Pool().Exec(ctx, "INSERT INTO admin_activity VALUES('2000-01-01','old',true,5,'2000-01-01'); INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id) VALUES('old','owner_1','2000-01-01','old-key')"); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.store.PruneAdminObservations(ctx); err != nil {
@@ -159,5 +161,77 @@ func TestAdminBufferDoesNotUseDatabaseOnRequest(t *testing.T) {
 	response := do(t, e.h, http.MethodGet, "/v1/me", "", map[string]string{"X-Test-Principal": principalHeader(fixtureOwner)})
 	if response.Code != 200 {
 		t.Fatalf("observation failed user request: %d", response.Code)
+	}
+}
+
+type pausedCredentialsRepository struct {
+	repo.Repository
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r pausedCredentialsRepository) ListCLICredentials(ctx context.Context, userID string) ([]repo.CLICredential, error) {
+	close(r.started)
+	select {
+	case <-r.release:
+		return r.Repository.ListCLICredentials(ctx, userID)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+func TestAdminInFlightObservationCannotRestoreLoggedOutSession(t *testing.T) {
+	for _, alreadyObserved := range []bool{false, true} {
+		t.Run(fmt.Sprint(alreadyObserved), func(t *testing.T) {
+			e := newTestEnv(t)
+			codec := auth.SessionCodec{Secret: []byte(oauthTestSigningMaterial)}
+			token := codec.Sign(fixtureOwner.ID)
+			session, ok := codec.VerifySessionDetails(token)
+			if !ok {
+				t.Fatal("session did not verify")
+			}
+			if alreadyObserved {
+				if err := e.store.ObserveSession(context.Background(), session); err != nil {
+					t.Fatal(err)
+				}
+			}
+			replica := pgrepo.New(e.store.Pool())
+			paused := pausedCredentialsRepository{Repository: replica, started: make(chan struct{}), release: make(chan struct{})}
+			defer func() {
+				select {
+				case <-paused.release:
+				default:
+					close(paused.release)
+				}
+			}()
+			handler := server.New(server.Config{Environment: "test", SessionSecret: oauthTestSigningMaterial}, server.WithRepository(paused), server.WithAuthenticator(auth.DBAuthenticator{Resolver: replica, SessionSecret: oauthTestSigningMaterial})).Handler()
+			headers := map[string]string{"Cookie": "slashdocs_session=" + token}
+			completed := make(chan int, 1)
+			go func() {
+				response := do(t, handler, http.MethodGet, "/v1/auth/cli/credentials", "", headers)
+				completed <- response.Code
+			}()
+			select {
+			case <-paused.started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("request did not enter handler")
+			}
+			logout := do(t, handler, http.MethodPost, "/v1/auth/logout", "", headers)
+			if logout.Code != 204 {
+				t.Fatalf("logout=%d", logout.Code)
+			}
+			close(paused.release)
+			select {
+			case status := <-completed:
+				if status != 200 {
+					t.Fatalf("in-flight request=%d", status)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("in-flight request did not finish")
+			}
+			stats, err := e.store.AdminStats(context.Background(), codec.SigningKeyID())
+			if err != nil || stats.LoggedInUsers != 0 || stats.Sessions != 0 {
+				t.Fatalf("logout was undone: %+v %v", stats, err)
+			}
+		})
 	}
 }

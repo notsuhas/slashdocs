@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -33,6 +34,7 @@ type signedPayload struct {
 	Subject   string `json:"sub"`
 	Audience  string `json:"aud"`
 	ExpiresAt int64  `json:"exp"`
+	Nonce     string `json:"nonce,omitempty"`
 }
 
 func (s SessionCodec) Sign(userID string) string {
@@ -41,6 +43,9 @@ func (s SessionCodec) Sign(userID string) string {
 
 func (s SessionCodec) SignForAudience(userID, audience string, ttl time.Duration) string {
 	p := signedPayload{Subject: userID, Audience: audience, ExpiresAt: time.Now().Add(ttl).Unix()}
+	if audience == audSession {
+		p.Nonce = rand.Text()
+	}
 	payload, _ := json.Marshal(p)
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, s.Secret)

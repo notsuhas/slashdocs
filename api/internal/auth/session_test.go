@@ -80,3 +80,16 @@ func TestSessionDetailsRequiresValidSession(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionCredentialsAreUniquePerLogin(t *testing.T) {
+	codec := auth.SessionCodec{Secret: []byte("test-secret")}
+	first, second := codec.Sign("user"), codec.Sign("user")
+	if first == second {
+		t.Fatal("separate logins reused a session credential")
+	}
+	for _, token := range []string{first, second} {
+		if _, ok := codec.VerifySessionDetails(token); !ok {
+			t.Fatal("new session did not verify")
+		}
+	}
+}

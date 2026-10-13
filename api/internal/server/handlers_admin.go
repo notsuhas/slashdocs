@@ -63,6 +63,9 @@ func (h handlers) observeAdminSession(c *gin.Context, token string) {
 }
 func (h handlers) forgetAdminSession(c *gin.Context) {
 	if ck, err := c.Request.Cookie(sessionCookieName); err == nil {
-		logObservation(c, h.deps.repository.ForgetSession(c.Request.Context(), auth.HashToken(ck.Value)))
+		session, ok := (auth.SessionCodec{Secret: []byte(h.deps.sessionSecret)}).VerifySessionDetails(ck.Value)
+		if ok {
+			logObservation(c, h.deps.repository.ForgetSession(c.Request.Context(), session))
+		}
 	}
 }

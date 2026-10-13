@@ -91,7 +91,7 @@ func (s *Store) ObserveSession(ctx context.Context, session auth.VerifiedSession
 	if seen {
 		return nil
 	}
-	_, err := s.db.Exec(ctx, `INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id) VALUES($1,$2,to_timestamp($3),$4) ON CONFLICT(token_hash) DO UPDATE SET signing_key_id=excluded.signing_key_id`, session.TokenHash, session.UserID, session.ExpiresAt, session.SigningKeyID)
+	_, err := s.db.Exec(ctx, `INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id) VALUES($1,$2,to_timestamp($3),$4) ON CONFLICT(token_hash) DO UPDATE SET signing_key_id=excluded.signing_key_id WHERE admin_sessions.revoked_at IS NULL`, session.TokenHash, session.UserID, session.ExpiresAt, session.SigningKeyID)
 	if err != nil {
 		return err
 	}
@@ -103,10 +103,10 @@ func (s *Store) ObserveSession(ctx context.Context, session auth.VerifiedSession
 	s.adminSessions.seen[session.TokenHash] = session.SigningKeyID
 	return nil
 }
-func (s *Store) ForgetSession(ctx context.Context, hash string) error {
-	_, err := s.db.Exec(ctx, `DELETE FROM admin_sessions WHERE token_hash=$1`, hash)
+func (s *Store) ForgetSession(ctx context.Context, session auth.VerifiedSession) error {
+	_, err := s.db.Exec(ctx, `INSERT INTO admin_sessions(token_hash,user_id,expires_at,signing_key_id,revoked_at) VALUES($1,$2,to_timestamp($3),$4,now()) ON CONFLICT(token_hash) DO UPDATE SET revoked_at=now()`, session.TokenHash, session.UserID, session.ExpiresAt, session.SigningKeyID)
 	s.adminSessions.Lock()
-	delete(s.adminSessions.seen, hash)
+	delete(s.adminSessions.seen, session.TokenHash)
 	s.adminSessions.Unlock()
 	return err
 }
@@ -124,8 +124,8 @@ func (s *Store) AdminStats(ctx context.Context, keyID string) (repo.AdminStats, 
  (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user AND day>=(now() AT TIME ZONE 'UTC')::date-1 AND last_seen>now()-interval '24 hours'),
  (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user AND day>=(now() AT TIME ZONE 'UTC')::date-7 AND last_seen>now()-interval '7 days'),
  (SELECT count(DISTINCT principal_id) FROM admin_activity WHERE is_user AND day>=(now() AT TIME ZONE 'UTC')::date-30 AND last_seen>now()-interval '30 days'),
- (SELECT count(DISTINCT user_id) FROM admin_sessions WHERE expires_at>now() AND signing_key_id=$1),
- (SELECT count(*) FROM admin_sessions WHERE expires_at>now() AND signing_key_id=$1),
+ (SELECT count(DISTINCT user_id) FROM admin_sessions WHERE expires_at>now() AND revoked_at IS NULL AND signing_key_id=$1),
+ (SELECT count(*) FROM admin_sessions WHERE expires_at>now() AND revoked_at IS NULL AND signing_key_id=$1),
  (SELECT count(*) FROM documents),(SELECT count(*) FROM versions),
  (SELECT coalesce(sum(byte_length),0) FROM versions),
  (SELECT count(*) FROM versions WHERE byte_length IS NULL),

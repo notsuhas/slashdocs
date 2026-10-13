@@ -26,6 +26,7 @@ type AdminSession struct {
 	UserID       string
 	ExpiresAt    pgtype.Timestamptz
 	SigningKeyID string
+	RevokedAt    pgtype.Timestamptz
 }
 
 type CliCredential struct {
