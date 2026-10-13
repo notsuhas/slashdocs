@@ -23,6 +23,7 @@ import (
 
 // Config holds static configuration for the server.
 type Config struct {
+	AdminUsers   []string
 	Environment  string
 	AppOrigin    string
 	RenderOrigin string
@@ -64,6 +65,7 @@ type readinessCheck struct {
 }
 
 type dependencies struct {
+	adminUsers                []string
 	commentNotificationSender notifications.Sender
 	authenticator             auth.Authenticator
 	repository                repo.Repository
@@ -145,6 +147,7 @@ func (denyAllAuthenticator) Authenticate(_ *http.Request) (*auth.Principal, erro
 func New(cfg Config, opts ...Option) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	deps := dependencies{
+		adminUsers:           cfg.AdminUsers,
 		authenticator:        denyAllAuthenticator{},
 		stateStore:           auth.NewStateStore(),
 		oidc:                 cfg.OIDC,
@@ -267,6 +270,8 @@ func (s *Server) routes(deps dependencies) {
 	activityLimit := activityRateLimit()
 	// A separate budget: presence heartbeats must not starve other activity.
 	presenceLimit := activityRateLimit()
+	authed.Use(h.observeActivity)
+	authed.GET("/admin/stats", h.adminStats)
 	authed.GET("/me", h.me)
 	authed.GET("/users", h.searchUsers)
 	authed.GET("/google-groups", h.searchGoogleGroups)

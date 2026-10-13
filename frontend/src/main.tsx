@@ -16,6 +16,7 @@ import { DocumentPage } from "@/pages/document";
 import { FolderPage } from "@/pages/folder";
 import { ServiceAccountsPage } from "@/pages/service-accounts";
 import { DevelopersPage } from "@/pages/developers";
+import { AdminPage } from "@/pages/admin";
 import { ProfilePage } from "@/pages/profile";
 import { StartPage } from "@/pages/start";
 import { migrateLegacyStorage } from "@/lib/legacy-storage";
@@ -59,6 +60,7 @@ function App() {
                   element={<ServiceAccountsPage />}
                 />
                 <Route path="settings/profile" element={<ProfilePage />} />
+                <Route path="admin" element={<AdminPage />} />
                 <Route path="developers" element={<DevelopersPage />} />
               </Route>
               {/* legacy redirects */}

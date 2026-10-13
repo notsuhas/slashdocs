@@ -32,6 +32,22 @@ func (s SessionCodec) SignForAudience(userID, audience string, ttl time.Duration
 	sig := mac.Sum(nil)
 	return "v1." + payloadB64 + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
+func (s SessionCodec) SessionExpiry(v string) (int64, bool) {
+	if _, ok := s.VerifySession(v); !ok {
+		return 0, false
+	}
+	parts := strings.Split(v, ".")
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return 0, false
+	}
+	var p signedPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return 0, false
+	}
+	return p.ExpiresAt, true
+}
+
 func (s SessionCodec) VerifySession(v string) (string, bool) {
 	return s.VerifyAudience(v, audSession)
 }

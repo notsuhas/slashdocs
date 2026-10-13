@@ -80,3 +80,22 @@ gh variable set CLOUDFLARE_DEPLOY_ENABLED --repo OWNER/slashdocs --body true
 ```
 
 The workflow becomes available after its code reaches the relevant branch. This setup keeps the original Go CI and deployment target available; it does not merge or publish a pull request automatically.
+
+## Admin statistics
+
+Set `ADMIN_USERS` on the app Worker to a comma-separated list of admin email addresses
+(e.g. `you@example.com,other@example.com`). Those users must still satisfy the login
+policy. Unset/empty denies everyone; bots cannot be admins. Open **Admin statistics**
+in the account menu or `/app/admin`. Authorization is enforced by `/v1/admin/stats`.
+Apply D1 migrations before deploying this version. For generated deployments, set
+`ADMIN_USERS` as an app Worker secret so regenerating configuration preserves it;
+for local development, use `.dev.vars` or the example Wrangler `vars` block.
+
+The dashboard reports signed-up human accounts, active humans over 24 hours/7 days/30 days,
+unexpired browser sessions, retained documents/versions, stored HTML bytes, comments,
+enabled bots, and daily authenticated API request totals over 30 UTC days. Logged-in
+means a valid session, not current online presence. Activity starts with this deployment;
+pre-tracking dates display a dash. API usage includes bots and failed authorized operations,
+excludes dashboard requests, and does not represent Cloudflare billing or anonymous render traffic.
+Deleted documents and their versions/comments are excluded; HTML bytes exclude orphan R2 objects,
+database storage, and infrastructure overhead. Counters contain aggregate counts, not document contents.

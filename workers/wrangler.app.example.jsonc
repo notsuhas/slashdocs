@@ -58,5 +58,7 @@
     "ALLOWED_EMAILS": "owner@example.com",
     "ALLOWED_DOMAINS": "example.com",
     "DEPLOYMENT": "org",
+    // Comma-separated admin emails; empty disables admin access.
+    "ADMIN_USERS": "",
   },
 }

@@ -264,3 +264,23 @@ None. `slashdocs` collects no telemetry, analytics, or usage data, and phones ho
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+### Admin observability
+
+Set `ADMIN_USERS=you@example.com,other@example.com` on the server (or app Worker)
+to enable **Admin statistics** in those users' account menus at `/app/admin`.
+The list matches signed-in email addresses case-insensitively; it does not bypass
+login restrictions. Empty/unset denies access, and service accounts cannot be admins.
+The API at `/v1/admin/stats` independently enforces this allowlist.
+
+Metrics cover signed-up human accounts, active humans in 24 hours/7 days/30 days,
+unexpired browser sessions, retained documents and uploaded versions, HTML bytes,
+comments/replies, enabled bots, and daily authenticated API requests over 30 UTC days.
+Activity tracking begins when this version is deployed; earlier totals cannot be reconstructed.
+Requests include bots and failed authorized operations, exclude dashboard requests,
+and do not measure anonymous traffic, render delivery, bandwidth, or hosting costs.
+Logged-in users have an unexpired session and are not necessarily online.
+On Go, pre-existing sessions appear when next used; logout removes observed sessions.
+HTML storage excludes database/infrastructure overhead. Go versions predating this change
+have unknown byte sizes and are shown explicitly rather than counted as zero.
+Apply database migrations before deploying; normal Go startup applies them automatically.

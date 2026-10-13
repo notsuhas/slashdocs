@@ -310,6 +310,7 @@ func newApplicationServer(ctx context.Context, store *pgrepo.Store, blobs blob.S
 		options = append(options, server.WithGoogleGroupDirectory(googleGroups.directory))
 	}
 	return server.New(server.Config{
+		AdminUsers:                splitCSV(os.Getenv("ADMIN_USERS")),
 		Environment:               server.EnvProduction,
 		AppOrigin:                 origins.appOrigin,
 		RenderOrigin:              origins.renderOrigin,

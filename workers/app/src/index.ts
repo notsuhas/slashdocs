@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import type { AppEnv } from "./env";
 import { ApiError } from "../../shared/errors";
 import { authRoutes, requireAuth } from "./routes/auth";
+import { adminRoutes } from "./routes/admin";
 import { configRoutes } from "./routes/config";
 import { documentRoutes } from "./routes/documents";
 import { versionRoutes } from "./routes/versions";
@@ -96,6 +97,7 @@ for (const path of [
   secured.on(["GET", "PUT"], path, activityLimit);
 secured.post("/v1/documents/:id/access-requests", activityLimit);
 secured.post("/v1/documents/:id/presence", activityRateLimit());
+secured.route("/", adminRoutes);
 secured.route("/", documentRoutes);
 secured.route("/", versionRoutes);
 secured.route("/", grantRoutes);

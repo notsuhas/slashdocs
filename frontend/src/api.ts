@@ -1,3 +1,20 @@
+export type AdminStats = {
+  users: number;
+  active_24h: number;
+  active_7d: number;
+  active_30d: number;
+  logged_in_users: number;
+  sessions: number;
+  documents: number;
+  versions: number;
+  storage_bytes: number;
+  unknown_size_versions: number;
+  comments: number;
+  service_accounts: number;
+  tracking_since: string | null;
+  daily: { day: string; requests: number; active_users: number }[];
+};
+
 export type Principal = {
   type: "user" | "service_account" | "google_group" | "anyone";
   id: string;
@@ -294,9 +311,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ enabled }),
     }),
+  adminStats: () => request<AdminStats>("/v1/admin/stats"),
   me: () =>
     request<{
       principal: Principal;
+      is_admin?: boolean;
       user?: Principal;
       service_account?: unknown;
     }>("/v1/me"),

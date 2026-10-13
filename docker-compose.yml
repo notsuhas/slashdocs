@@ -90,6 +90,7 @@ services:
 
       # Optional: supplied by the local process environment for Slack testing.
       SLASHDOCS_SLACK_BOT_TOKEN: ${SLASHDOCS_SLACK_BOT_TOKEN:-}
+      ADMIN_USERS: ${ADMIN_USERS:-}
 
       SLASHDOCS_APP_ORIGIN: http://localhost:8080
       # Distinct browser origin, same listener: the server only serves /v/…

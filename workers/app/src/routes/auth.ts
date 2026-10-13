@@ -1,3 +1,4 @@
+import { isAdmin } from "../services/admin";
 import { z } from "zod";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -265,6 +266,7 @@ authRoutes.get("/v1/me", requireAuth, async (c) => {
     });
   }
   return c.json({
+    ...(isAdmin(c.env, user) ? { is_admin: true } : {}),
     principal: { type: user.type, id: user.id },
     user: {
       id: user.id,

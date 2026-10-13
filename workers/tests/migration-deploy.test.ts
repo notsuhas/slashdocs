@@ -29,11 +29,11 @@ describe("deployment migrations", () => {
     expect(sql).not.toMatch(/RAISE\(ABORT,'folder_(?:depth|cycle)_conflict'\) END;/);
   });
 
-  it("executes every Wrangler-split statement from 0001 through 0010 in workerd", async () => {
+  it("executes every Wrangler-split migration statement in workerd", async () => {
     const mf = new Miniflare({ modules: true, script: "", d1Databases: ["DB"] });
     try {
       const db = await mf.getD1Database("DB");
-      expect(names).toHaveLength(10);
+      expect(names).toContain("0011_admin_observability.sql");
       for (const name of names) {
         const sql = await readFile(resolve(migrations, name), "utf8");
         const statements = unstable_splitSqlQuery(sql);

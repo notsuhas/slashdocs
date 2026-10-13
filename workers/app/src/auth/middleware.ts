@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { internalActor } from "./internal-actor";
 import type { AppEnv } from "../env";
 import { ApiError } from "../../../shared/errors";
@@ -29,6 +29,7 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
   const trusted = internalActor(c.req.raw);
   if (trusted) {
     c.set("actor", await refreshActorGroups(c.env, trusted));
+    await recordActivity(c);
     await next();
     return;
   }
@@ -114,6 +115,7 @@ export const requireAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
       throw error;
     }
     c.set("actor", await refreshActorGroups(c.env, c.get("actor")));
+    await recordActivity(c);
     await next();
   });
 };
@@ -146,4 +148,19 @@ export async function revalidateActor(
       .bind(actor.credentialId, actor.principal.id, nowSeconds())
       .first());
   return false;
+}
+
+async function recordActivity(c: Context<AppEnv>) {
+  if (c.req.path.startsWith("/v1/admin/")) return;
+  const user = c.get("actor").principal;
+  const now = new Date().toISOString();
+  try {
+    await c.env.DB.prepare(
+      "INSERT INTO admin_activity(day,principal_id,is_user,last_seen) VALUES(?,?,?,?) ON CONFLICT(day,principal_id) DO UPDATE SET requests=requests+1,last_seen=excluded.last_seen",
+    )
+      .bind(now.slice(0, 10), user.id, user.type === "user" ? 1 : 0, now)
+      .run();
+  } catch {
+    console.error(JSON.stringify({ event: "admin_observation_failed" }));
+  }
 }
