@@ -416,3 +416,18 @@ func TestAdminUsersPaginationAndLastSignIn(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminSkipsAnonymousReaders(t *testing.T) {
+	e := newTestEnv(t)
+	e.shareWithAnyone("viewer")
+	before, err := e.store.AdminStats(context.Background(), "")
+	if err != nil || len(before.Daily) != 1 {
+		t.Fatalf("before anonymous read: %+v %v", before, err)
+	}
+	r := do(t, e.h, http.MethodGet, "/v1/documents/"+e.doc.ID, "", nil)
+	assertStatus(t, r, http.StatusOK)
+	after, err := e.store.AdminStats(context.Background(), "")
+	if err != nil || len(after.Daily) != 1 || after.Daily[0].Requests != before.Daily[0].Requests {
+		t.Fatalf("anonymous read counted: %+v %v", after, err)
+	}
+}

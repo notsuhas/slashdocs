@@ -124,8 +124,13 @@ SLASHDOCS_OIDC_PROVIDER_NAME=Okta
 The server discovers the provider's endpoints from the issuer at startup,
 requests the `openid email profile` scopes, and verifies ID tokens against the
 issuer's JWKS. The ID token must include non-empty `sub` and `email` claims;
-`name` and `picture` fill in the optional profile fields. When the provider
-includes `email_verified`, it must be true.
+`name` and `picture` fill in the optional profile fields. The ID token must
+also prove the email is verified: `email_verified` must be true. Entra ID never
+sends `email_verified`. In the Entra app registration, open **Token
+configuration**, add the optional ID-token claims `email` and `xms_edov`, and
+save. If the portal does not list `xms_edov`, add
+`{"name": "xms_edov", "essential": false}` under `optionalClaims.idToken` in
+the **Manifest**.
 
 If the server reaches the IdP at a different URL than browsers do (common with
 docker-compose, where the browser sees `http://localhost:5556` but containers
@@ -172,16 +177,22 @@ slashdocs runs in one of two modes, set by `SLASHDOCS_DEPLOYMENT`:
 
 - **`public`** (default) — anyone who can authenticate with the identity
   provider can sign in. Sharing a document with "everyone" means _anyone with
-  the link_.
+  the link_, and that includes readers who are not signed in: they can read
+  the document, its versions, and its comments. To comment or edit, the app
+  sends them to sign in first, whatever role the link gives. People search
+  finds only your contacts: the people you share with and the people who
+  share with you. Other users appear only when you type their full email
+  address.
 - **`org`** — login is gated to your organization's domains
   (`SLASHDOCS_ORG_DOMAINS`, a comma-separated list that supports multiple domains
   for acquisitions). Sharing with "everyone" then means _anyone in the org_,
   because only org members can authenticate. Set `SLASHDOCS_ORG_NAME` to label the
-  org in the UI (e.g. "Anyone in Razorpay").
+  org in the UI (e.g. "Anyone in Razorpay"). People search finds every user
+  who has signed in.
 
 On an org deployment the org domains are the login gate, so you do not also
 need `ALLOWED_OAUTH_DOMAINS`. The document permission model is identical in both
-modes; only the login gate and the wording differ.
+modes; only the login gate, people search, and the wording differ.
 
 > For an `org` deployment, set the OAuth consent screen to **Internal** so
 > Google itself restricts sign-in to your Workspace organization, and set

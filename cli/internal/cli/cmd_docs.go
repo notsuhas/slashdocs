@@ -73,7 +73,8 @@ func documentListCmd(g *globals, out io.Writer) *cobra.Command {
 			"A date is a day (25-09-26, 5 september, monday, today, 3 days ago), a week,\n" +
 			"a month, or a year (last week, september, this year, 2026), or last 7 days.\n" +
 			"Dates use UTC. Repeat from: or in: to match any value.\n" +
-			"Quote the whole query when it contains spaces.",
+			"Quote the whole query when it contains spaces.\n\n" +
+			"With --local, the query finds each word in the title or the path of a document, and modifiers are not available.",
 		Example: "  slashdocs docs list 'incident from:alice@example.com label:api,review in:\"Product Specs\"'\n" +
 			"  slashdocs docs list --query 'rollout -draft from:me after:last week'",
 		Args: cobra.MaximumNArgs(1),
@@ -498,7 +499,7 @@ func recordBaseVersion(g *globals, docID, versionID string) error {
 	name, cx, cfg := currentContext(g)
 	cx.Pulled[docID] = versionID
 	cfg.Contexts[name] = cx
-	if cfg.ActiveContext == "" {
+	if cfg.ActiveContext == "" && !g.local {
 		cfg.ActiveContext = name
 	}
 	return saveConfig(cfg)

@@ -263,6 +263,7 @@ type Comment struct {
 	Replies         []Comment         `json:"replies,omitempty"`
 	CreatedAt       string            `json:"created_at,omitempty"`
 	ResolvedAt      string            `json:"resolved_at,omitempty"`
+	Edited          bool              `json:"edited,omitempty"`
 }
 
 // CommentReaction is one principal's acknowledgement of a comment with one
@@ -400,6 +401,7 @@ type Repository interface {
 	PrincipalExists(ctx context.Context, principal auth.Principal) (bool, error)
 	UserByEmail(ctx context.Context, email string) (auth.Principal, error)
 	SearchUsersByEmail(ctx context.Context, query string) ([]auth.Principal, error)
+	SearchContacts(ctx context.Context, caller auth.Principal, query string) ([]auth.Principal, error)
 	EnsureUserByEmail(ctx context.Context, email string) (auth.Principal, error)
 	GoogleGroupMembershipSnapshot(ctx context.Context, userID string) (GoogleGroupMembershipSnapshot, error)
 	ReplaceGoogleGroupMemberships(ctx context.Context, userID string, groups []GoogleGroup, syncedAt time.Time) error

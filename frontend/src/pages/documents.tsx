@@ -20,7 +20,10 @@ import { UnifiedGrid } from "@/components/browse/unified-grid";
 import { UnifiedTable } from "@/components/browse/unified-table";
 import { ViewModeToggle } from "@/components/browse/view-mode-toggle";
 import { AccessWarningDialog, NewFolderDialog } from "@/components/browse/dialogs";
-import { UploadBackupItem } from "@/components/browse/upload-backup";
+import {
+  UploadBackupDialog,
+  UploadBackupMenuItem,
+} from "@/components/browse/upload-backup";
 import { DocumentSearchInput } from "@/components/browse/document-search-input";
 import { FeaturedItems } from "@/components/browse/featured-items";
 import { hasDocumentSearchOperators } from "@/lib/search-query";
@@ -123,6 +126,7 @@ export function DocumentsPage() {
 
   const viewMode = viewModeStore.useStore();
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const qc = useQueryClient();
 
   // Drag and drop
@@ -253,7 +257,7 @@ export function DocumentsPage() {
               </Button>
             </DropdownTrigger>
             <DropdownContent>
-              <UploadBackupItem />
+              <UploadBackupMenuItem onSelect={() => setUploadOpen(true)} />
             </DropdownContent>
           </Dropdown>
         </div>
@@ -303,6 +307,7 @@ export function DocumentsPage() {
       )}
 
       <NewFolderDialog open={newFolderOpen} onOpenChange={setNewFolderOpen} />
+      <UploadBackupDialog open={uploadOpen} onOpenChange={setUploadOpen} />
 
       <AccessWarningDialog
         warning={accessWarning}

@@ -55,6 +55,9 @@ func (h handlers) observeActivity(c *gin.Context) {
 		return
 	}
 	p := current(c)
+	if p == nil || p.Type == auth.PrincipalAnonymous {
+		return
+	}
 	logObservation(c, h.deps.repository.RecordActivity(c.Request.Context(), p.ID, p.Type == auth.PrincipalUser))
 	if p.Session != nil {
 		logObservation(c, h.deps.repository.ObserveSession(c.Request.Context(), *p.Session))

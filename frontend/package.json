@@ -4,7 +4,7 @@
   "description": "",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build && npm run build:bridge && node scripts/sync-dist.mjs",
+    "build": "tsc -b && vite build && vite build --mode cli && npm run build:bridge && node scripts/sync-dist.mjs",
     "build:bridge": "node scripts/build-bridge.mjs",
     "e2e": "playwright test",
     "e2e:install": "playwright install chromium",

@@ -131,9 +131,12 @@ func printPushedVersion(out io.Writer, g *globals, docID, server string, b []byt
 		}
 		return render(out, g, nb)
 	}
-	num := fmt.Sprint(value(m, "number"))
-	id := fmt.Sprint(value(m, "id"))
-	if err := confirm(out, g, fmt.Sprintf("Pushed version %s (%s) to %s. Review it at %s", num, id, docID, url)); err != nil {
+	// slashdocs local keeps only the current version, so it has no number.
+	version := fmt.Sprint(value(m, "id"))
+	if num := value(m, "number"); num != nil {
+		version = fmt.Sprint(num) + " (" + version + ")"
+	}
+	if err := confirm(out, g, fmt.Sprintf("Pushed version %s to %s. Review it at %s", version, docID, url)); err != nil {
 		return err
 	}
 	return printOrgWideViewerNudge(out, g, docID)

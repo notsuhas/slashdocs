@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { api } from "@/api";
+import { api, type Principal } from "@/api";
 import { useDocumentStream } from "./use-document-stream";
 const capability = vi.hoisted(() => ({ realtime: false }));
 vi.mock("@/lib/hooks", () => ({ useCapability: () => capability.realtime }));
@@ -13,7 +13,10 @@ class EventSourceMock {
 interface IProvider {
   children: ReactNode;
 }
-function setup() {
+function setup(signedIn = true) {
+  const principal: Principal | undefined = signedIn
+    ? { type: "user", id: "user_1" }
+    : undefined;
   const client = new QueryClient();
   function Provider(props: IProvider) {
     return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>;
@@ -23,6 +26,7 @@ function setup() {
       useDocumentStream({
         docId: "doc",
         version: "v1",
+        principal,
         onRemoteDocumentChange: vi.fn(),
       }),
     { wrapper: Provider },
@@ -46,6 +50,15 @@ it("does not send cursor traffic without realtime", async () => {
   act(() => hook.result.current.moveCursor({ path: "0", x: 0.2, y: 0.4 }));
   await act(() => vi.advanceTimersByTimeAsync(200));
   expect(post).not.toHaveBeenCalled();
+});
+it("does not report presence or cursors for signed-out readers", async () => {
+  capability.realtime = true;
+  const post = vi.spyOn(api, "postDocumentCursor").mockResolvedValue(undefined);
+  const hook = setup(false);
+  act(() => hook.result.current.moveCursor({ path: "0", x: 0.2, y: 0.4 }));
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(post).not.toHaveBeenCalled();
+  expect(api.postDocumentPresence).not.toHaveBeenCalled();
 });
 it("clears queued cursors when realtime is disabled and resumes when enabled", async () => {
   const post = vi.spyOn(api, "postDocumentCursor").mockResolvedValue(undefined);

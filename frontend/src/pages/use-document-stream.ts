@@ -230,16 +230,18 @@ export function useDocumentStream({
   }, []);
 
   // Report this viewer's place: at once on a version change, at most every
-  // REPORT_INTERVAL while scrolling, and as a heartbeat otherwise.
+  // REPORT_INTERVAL while scrolling, and as a heartbeat otherwise. Only a
+  // signed-in viewer reports.
   const lastReport = useRef(0);
   const pendingReport = useRef<number | undefined>(undefined);
+  const signedIn = !!principal;
   const report = useCallback(() => {
     window.clearTimeout(pendingReport.current);
     pendingReport.current = undefined;
     lastReport.current = Date.now();
-    if (realtime)
-      api.postDocumentPresence(docId, { session, ...place.current }).catch(() => {});
-  }, [docId, session, realtime]);
+    if (!realtime || !signedIn) return;
+    api.postDocumentPresence(docId, { session, ...place.current }).catch(() => {});
+  }, [docId, session, realtime, signedIn]);
   const scheduleReport = useCallback(() => {
     if (pendingReport.current !== undefined) return;
     const wait = Math.max(0, lastReport.current + REPORT_INTERVAL - Date.now());
@@ -282,9 +284,9 @@ export function useDocumentStream({
   }, [cursorBatch, realtime]);
   const moveCursor = useCallback(
     (spot: CursorSpot | null) => {
-      if (realtime) cursorBatch.add(spot);
+      if (realtime && signedIn) cursorBatch.add(spot);
     },
-    [cursorBatch, realtime],
+    [cursorBatch, realtime, signedIn],
   );
 
   // A new listener gets the newest point of every cursor at once.

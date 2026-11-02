@@ -54,6 +54,43 @@ ORDER BY
   email
 LIMIT 8;
 
+-- name: SearchContacts :many
+-- Public servers: a partial query matches only the caller's contacts, which
+-- are the people the caller shares with and the people who share with the
+-- caller. Other users match only by their exact email, as when sharing. The
+-- query starts from the contacts, so its cost does not grow with all users.
+SELECT id,email,name,picture_url
+FROM users
+WHERE google_sub IS NOT NULL
+  AND (
+    lower(email) LIKE '%' || lower(@query) || '%'
+    OR lower(name) LIKE '%' || lower(@query) || '%'
+  )
+  AND id IN (
+    SELECT sent.principal_id FROM resource_grants sent
+    WHERE sent.revoked_at IS NULL AND sent.principal_type = 'user'
+      AND sent.granted_by_type = @caller_type AND sent.granted_by_user_id = @caller_id
+    UNION ALL
+    SELECT received.granted_by_user_id FROM resource_grants received
+    WHERE received.revoked_at IS NULL AND received.granted_by_type = 'user'
+      AND received.principal_type = @caller_type AND received.principal_id = @caller_id
+    UNION ALL
+    SELECT @caller_id::text WHERE @caller_type = 'user'
+    UNION ALL
+    SELECT exact.id FROM users exact WHERE exact.email = @query
+  )
+ORDER BY
+  CASE
+    WHEN lower(email) = lower(@query) THEN 0
+    WHEN lower(name) = lower(@query) THEN 1
+    WHEN lower(email) LIKE lower(@query) || '%' THEN 2
+    WHEN lower(name) LIKE lower(@query) || '%' THEN 3
+    ELSE 4
+  END,
+  name,
+  email
+LIMIT 8;
+
 -- name: GetUserByGoogleSub :one
 SELECT id,email,name,picture_url FROM users WHERE google_sub=$1;
 

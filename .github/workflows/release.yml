@@ -108,6 +108,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # The CLI embeds the `slashdocs local` app, which the frontend build makes.
+      - name: Build frontend
+        run: |
+          npm ci --prefix frontend
+          npm run build --prefix frontend
+
       - name: Set up Helm
         uses: azure/setup-helm@v4
 

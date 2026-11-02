@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,17 +25,34 @@ var errNoServer = errors.New("no slashdocs server configured; pass --server <url
 // newHTTPClient builds an http.Client with explicit connection and overall
 // timeouts so a slow or unreachable server can never hang the CLI.
 func newHTTPClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	return &http.Client{
 		Timeout:       timeout,
 		CheckRedirect: keepCredentialsOnMove,
 		Transport: &http.Transport{
-			Proxy:               http.ProxyFromEnvironment,
-			DialContext:         (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+			Proxy: func(r *http.Request) (*url.URL, error) {
+				if isLoopbackHost(r.URL.Hostname()) {
+					return nil, nil // a proxy cannot reach this machine
+				}
+				return http.ProxyFromEnvironment(r)
+			},
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, localhostAddr(addr))
+			},
 			ForceAttemptHTTP2:   true,
 			TLSHandshakeTimeout: 10 * time.Second,
 			IdleConnTimeout:     90 * time.Second,
 		},
 	}
+}
+
+// localhostAddr sends a *.localhost name to this machine, as RFC 6761 tells
+// and browsers do. The resolver of Go does not do it on all systems.
+func localhostAddr(addr string) string {
+	if host, port, err := net.SplitHostPort(addr); err == nil && isLocalhostName(host) {
+		return net.JoinHostPort("127.0.0.1", port)
+	}
+	return addr
 }
 
 var (
@@ -79,6 +97,10 @@ type Client struct {
 func client(g *globals) (*Client, error) {
 	srv := first(g.server, env("SLASHDOCS_SERVER"))
 	tok := first(g.token, env("SLASHDOCS_TOKEN"))
+	if g.local {
+		// slashdocs local needs no token, so no token goes to it.
+		return &Client{Base: srv, HTTP: apiHTTPClient}, nil
+	}
 	cfg, err := loadConfig()
 	if err != nil {
 		return nil, err

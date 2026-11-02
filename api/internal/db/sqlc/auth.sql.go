@@ -184,6 +184,82 @@ func (q *Queries) ResolveServiceAccountToken(ctx context.Context, tokenHash stri
 	return i, err
 }
 
+const searchContacts = `-- name: SearchContacts :many
+SELECT id,email,name,picture_url
+FROM users
+WHERE google_sub IS NOT NULL
+  AND (
+    lower(email) LIKE '%' || lower($1) || '%'
+    OR lower(name) LIKE '%' || lower($1) || '%'
+  )
+  AND id IN (
+    SELECT sent.principal_id FROM resource_grants sent
+    WHERE sent.revoked_at IS NULL AND sent.principal_type = 'user'
+      AND sent.granted_by_type = $2 AND sent.granted_by_user_id = $3
+    UNION ALL
+    SELECT received.granted_by_user_id FROM resource_grants received
+    WHERE received.revoked_at IS NULL AND received.granted_by_type = 'user'
+      AND received.principal_type = $2 AND received.principal_id = $3
+    UNION ALL
+    SELECT $3::text WHERE $2 = 'user'
+    UNION ALL
+    SELECT exact.id FROM users exact WHERE exact.email = $1
+  )
+ORDER BY
+  CASE
+    WHEN lower(email) = lower($1) THEN 0
+    WHEN lower(name) = lower($1) THEN 1
+    WHEN lower(email) LIKE lower($1) || '%' THEN 2
+    WHEN lower(name) LIKE lower($1) || '%' THEN 3
+    ELSE 4
+  END,
+  name,
+  email
+LIMIT 8
+`
+
+type SearchContactsParams struct {
+	Query      string
+	CallerType string
+	CallerID   string
+}
+
+type SearchContactsRow struct {
+	ID         string
+	Email      string
+	Name       string
+	PictureUrl string
+}
+
+// Public servers: a partial query matches only the caller's contacts, which
+// are the people the caller shares with and the people who share with the
+// caller. Other users match only by their exact email, as when sharing. The
+// query starts from the contacts, so its cost does not grow with all users.
+func (q *Queries) SearchContacts(ctx context.Context, arg SearchContactsParams) ([]SearchContactsRow, error) {
+	rows, err := q.db.Query(ctx, searchContacts, arg.Query, arg.CallerType, arg.CallerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchContactsRow
+	for rows.Next() {
+		var i SearchContactsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.PictureUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchUsersByEmail = `-- name: SearchUsersByEmail :many
 SELECT id,email,name,picture_url
 FROM users
